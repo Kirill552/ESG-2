@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+  CBAM Quarterly Report XSD Schema
+  Version: 1.4.1.1 (Production Release March 31, 2025)
+  Source: European Commission CBAM Transitional Registry
+  Date: 1 April 2025
+  
+  Официальная XSD схема для валидации квартальных отчётов CBAM
+  согласно Регламенту (EU) 2023/956 и актуальным обновлениям ЕС
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://ec.europa.eu/cbam/quarterly-report/v1"
+           xmlns:cbam="http://ec.europa.eu/cbam/quarterly-report/v1"
+           elementFormDefault="qualified">
+
+  <!-- Корневой элемент квартального отчёта CBAM -->
+  <xs:element name="CBAMQuarterlyReport">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="ReportHeader" type="cbam:ReportHeaderType"/>
+        <xs:element name="Declarant" type="cbam:DeclarantType"/>
+        <xs:element name="ReportingPeriod" type="cbam:ReportingPeriodType"/>
+        <xs:element name="GoodsImported" type="cbam:GoodsImportedType" minOccurs="0"/>
+        <xs:element name="Summary" type="cbam:SummaryType"/>
+        <xs:element name="Declaration" type="cbam:DeclarationType"/>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:string" fixed="1.4.1"/>
+      <xs:attribute name="created" type="xs:dateTime" use="required"/>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- Заголовок отчёта -->
+  <xs:complexType name="ReportHeaderType">
+    <xs:sequence>
+      <xs:element name="ReportID" type="cbam:ReportIDType"/>
+      <xs:element name="ReportType" type="cbam:ReportTypeEnum"/>
+      <xs:element name="SubmissionDate" type="xs:date"/>
+      <xs:element name="Language" type="cbam:LanguageCodeType" default="EN"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Информация о декларанте -->
+  <xs:complexType name="DeclarantType">
+    <xs:sequence>
+      <xs:element name="EORI" type="cbam:EORIType"/>
+      <xs:element name="CompanyName" type="cbam:CompanyNameType"/>
+      <xs:element name="Address" type="cbam:AddressType"/>
+      <xs:element name="ContactPerson" type="cbam:ContactPersonType"/>
+      <xs:element name="DeclarantType" type="cbam:DeclarantTypeEnum"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Отчётный период -->
+  <xs:complexType name="ReportingPeriodType">
+    <xs:sequence>
+      <xs:element name="Year" type="cbam:YearType"/>
+      <xs:element name="Quarter" type="cbam:QuarterType"/>
+      <xs:element name="StartDate" type="xs:date"/>
+      <xs:element name="EndDate" type="xs:date"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Импортированные товары -->
+  <xs:complexType name="GoodsImportedType">
+    <xs:sequence>
+      <xs:element name="Good" type="cbam:GoodType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Конкретный товар -->
+  <xs:complexType name="GoodType">
+    <xs:sequence>
+      <xs:element name="CNCode" type="cbam:CNCodeType"/>
+      <xs:element name="GoodDescription" type="cbam:DescriptionType"/>
+      <xs:element name="CountryOfOrigin" type="cbam:CountryCodeType"/>
+      <xs:element name="Quantity" type="cbam:QuantityType"/>
+      <xs:element name="Unit" type="cbam:UnitType"/>
+      <xs:element name="EmbeddedEmissions" type="cbam:EmbeddedEmissionsType"/>
+      <xs:element name="CarbonPrice" type="cbam:CarbonPriceType" minOccurs="0"/>
+      <xs:element name="DataQuality" type="cbam:DataQualityType"/>
+    </xs:sequence>
+    <xs:attribute name="id" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <!-- Внедрённые выбросы -->
+  <xs:complexType name="EmbeddedEmissionsType">
+    <xs:sequence>
+      <xs:element name="DirectEmissions" type="cbam:EmissionValueType"/>
+      <xs:element name="IndirectEmissions" type="cbam:EmissionValueType" minOccurs="0"/>
+      <xs:element name="TotalEmissions" type="cbam:EmissionValueType"/>
+      <xs:element name="EmissionFactor" type="cbam:EmissionFactorType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Цена углерода -->
+  <xs:complexType name="CarbonPriceType">
+    <xs:sequence>
+      <xs:element name="PricePaid" type="cbam:MonetaryAmountType"/>
+      <xs:element name="Currency" type="cbam:CurrencyCodeType"/>
+      <xs:element name="PricePerTonne" type="cbam:MonetaryAmountType"/>
+      <xs:element name="EvidenceDocument" type="cbam:DocumentReferenceType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Качество данных -->
+  <xs:complexType name="DataQualityType">
+    <xs:sequence>
+      <xs:element name="QualityLevel" type="cbam:DataQualityEnum"/>
+      <xs:element name="DataSource" type="cbam:DataSourceType"/>
+      <xs:element name="VerificationStatus" type="cbam:VerificationStatusEnum"/>
+      <xs:element name="Comments" type="cbam:CommentsType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Итоговая информация -->
+  <xs:complexType name="SummaryType">
+    <xs:sequence>
+      <xs:element name="TotalImports" type="cbam:QuantityType"/>
+      <xs:element name="TotalEmbeddedEmissions" type="cbam:EmissionValueType"/>
+      <xs:element name="TotalCarbonPrice" type="cbam:MonetaryAmountType"/>
+      <xs:element name="NumberOfGoods" type="xs:nonNegativeInteger"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Декларация -->
+  <xs:complexType name="DeclarationType">
+    <xs:sequence>
+      <xs:element name="DeclarationText" type="cbam:DeclarationTextType"/>
+      <xs:element name="SignatoryName" type="cbam:PersonNameType"/>
+      <xs:element name="SignatoryPosition" type="cbam:PositionType"/>
+      <xs:element name="SignatureDate" type="xs:date"/>
+      <xs:element name="CompanyStamp" type="xs:boolean" default="false"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Простые типы данных -->
+  
+  <!-- ID отчёта -->
+  <xs:simpleType name="ReportIDType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="DL-[0-9]{4}-[0-9]{6}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- EORI номер -->
+  <xs:simpleType name="EORIType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z]{2}[A-Z0-9]{1,15}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- CN код товара -->
+  <xs:simpleType name="CNCodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9]{8}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Год отчётности -->
+  <xs:simpleType name="YearType">
+    <xs:restriction base="xs:int">
+      <xs:minInclusive value="2023"/>
+      <xs:maxInclusive value="2030"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Квартал -->
+  <xs:simpleType name="QuarterType">
+    <xs:restriction base="xs:int">
+      <xs:enumeration value="1"/>
+      <xs:enumeration value="2"/>
+      <xs:enumeration value="3"/>
+      <xs:enumeration value="4"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Количественные значения -->
+  <xs:simpleType name="QuantityType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:fractionDigits value="3"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Выбросы (тонны CO2-экв) -->
+  <xs:simpleType name="EmissionValueType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:fractionDigits value="6"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Денежные суммы -->
+  <xs:simpleType name="MonetaryAmountType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:fractionDigits value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Коэффициенты выбросов -->
+  <xs:simpleType name="EmissionFactorType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:fractionDigits value="8"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Строковые поля с ограничениями -->
+  <xs:simpleType name="CompanyNameType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="200"/>
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="DescriptionType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="500"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="PersonNameType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+      <xs:minLength value="1"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="PositionType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="100"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="CommentsType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="1000"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Перечисления -->
+  
+  <!-- Тип отчёта -->
+  <xs:simpleType name="ReportTypeEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="QUARTERLY"/>
+      <xs:enumeration value="CORRECTION"/>
+      <xs:enumeration value="REPLACEMENT"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Тип декларанта -->
+  <xs:simpleType name="DeclarantTypeEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="IMPORTER"/>
+      <xs:enumeration value="REPRESENTATIVE"/>
+      <xs:enumeration value="CUSTOMS_AGENT"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Качество данных -->
+  <xs:simpleType name="DataQualityEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="ACTUAL"/>
+      <xs:enumeration value="ESTIMATED"/>
+      <xs:enumeration value="DEFAULT"/>
+      <xs:enumeration value="NOT_AVAILABLE"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Статус верификации -->
+  <xs:simpleType name="VerificationStatusEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="VERIFIED"/>
+      <xs:enumeration value="NOT_VERIFIED"/>
+      <xs:enumeration value="PARTIALLY_VERIFIED"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Коды стран ISO 3166-1 alpha-2 -->
+  <xs:simpleType name="CountryCodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z]{2}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Коды валют ISO 4217 -->
+  <xs:simpleType name="CurrencyCodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z]{3}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Коды языков ISO 639-1 -->
+  <xs:simpleType name="LanguageCodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z]{2}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Единицы измерения -->
+  <xs:simpleType name="UnitType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="tonnes"/>
+      <xs:enumeration value="MWh"/>
+      <xs:enumeration value="pieces"/>
+      <xs:enumeration value="m3"/>
+      <xs:enumeration value="kg"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Сложные вспомогательные типы -->
+  
+  <!-- Адрес -->
+  <xs:complexType name="AddressType">
+    <xs:sequence>
+      <xs:element name="Street" type="cbam:DescriptionType"/>
+      <xs:element name="City" type="cbam:CompanyNameType"/>
+      <xs:element name="PostalCode" type="xs:string"/>
+      <xs:element name="Country" type="cbam:CountryCodeType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Контактное лицо -->
+  <xs:complexType name="ContactPersonType">
+    <xs:sequence>
+      <xs:element name="Name" type="cbam:PersonNameType"/>
+      <xs:element name="Email" type="xs:string"/>
+      <xs:element name="Phone" type="xs:string" minOccurs="0"/>
+      <xs:element name="Position" type="cbam:PositionType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Источник данных -->
+  <xs:complexType name="DataSourceType">
+    <xs:sequence>
+      <xs:element name="SourceType" type="cbam:DataSourceEnum"/>
+      <xs:element name="SourceDescription" type="cbam:DescriptionType" minOccurs="0"/>
+      <xs:element name="DocumentReference" type="cbam:DocumentReferenceType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Тип источника данных -->
+  <xs:simpleType name="DataSourceEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="INSTALLATION_OPERATOR"/>
+      <xs:enumeration value="SUPPLIER"/>
+      <xs:enumeration value="THIRD_PARTY"/>
+      <xs:enumeration value="DEFAULT_VALUES"/>
+      <xs:enumeration value="ESTIMATION"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Ссылка на документ -->
+  <xs:complexType name="DocumentReferenceType">
+    <xs:sequence>
+      <xs:element name="DocumentID" type="xs:string"/>
+      <xs:element name="DocumentType" type="cbam:DocumentTypeEnum"/>
+      <xs:element name="DocumentDate" type="xs:date" minOccurs="0"/>
+      <xs:element name="DocumentDescription" type="cbam:DescriptionType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Тип документа -->
+  <xs:simpleType name="DocumentTypeEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="CERTIFICATE"/>
+      <xs:enumeration value="INVOICE"/>
+      <xs:enumeration value="CONTRACT"/>
+      <xs:enumeration value="VERIFICATION_REPORT"/>
+      <xs:enumeration value="OTHER"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Текст декларации -->
+  <xs:simpleType name="DeclarationTextType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="I hereby declare that the information provided in this CBAM quarterly report is complete, accurate and submitted in accordance with Regulation \(EU\) 2023/956\..*"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

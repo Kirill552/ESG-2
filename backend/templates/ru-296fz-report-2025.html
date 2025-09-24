@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Отчет о выбросах ПГ (ПП 707 к 296-ФЗ) - [[org_name]]</title>
+    <style>
+        @font-face {
+            font-family: 'DejaVuSans';
+            src: url('/fonts/DejaVuSans.ttf') format('truetype');
+            font-weight: normal;
+        }
+        
+        @font-face {
+            font-family: 'DejaVuSans';
+            src: url('/fonts/DejaVuSans-Bold.ttf') format('truetype');
+            font-weight: bold;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DejaVuSans', Arial, sans-serif;
+            font-size: 11px;
+            line-height: 1.3;
+            color: #000;
+            background: white;
+            padding: 20px;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #000;
+        }
+
+        .page-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .page-subtitle {
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid #000;
+            text-transform: uppercase;
+        }
+
+        .org-info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .org-info-table td {
+            padding: 6px 8px;
+            border: 1px solid #000;
+            font-size: 10px;
+            vertical-align: top;
+        }
+
+        .org-info-table .label {
+            background: #f5f5f5;
+            font-weight: bold;
+            width: 30%;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 10px;
+        }
+
+        .data-table th {
+            background: #e0e0e0;
+            padding: 8px 4px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #000;
+            font-size: 9px;
+        }
+
+        .data-table td {
+            padding: 6px 4px;
+            border: 1px solid #000;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .data-table .text-left {
+            text-align: left;
+        }
+
+        .data-table .text-right {
+            text-align: right;
+        }
+
+        .total-row {
+            background: #f0f0f0;
+            font-weight: bold;
+        }
+
+        .signature-section {
+            margin-top: 30px;
+            padding: 15px;
+            border: 1px solid #000;
+        }
+
+        .signature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .signature-item {
+            border-bottom: 1px solid #000;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+
+        .signature-label {
+            font-size: 9px;
+            color: #666;
+            margin-bottom: 2px;
+        }
+
+        .signature-value {
+            font-size: 11px;
+            font-weight: bold;
+            min-height: 20px;
+        }
+
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                padding: 10px;
+            }
+            
+            .page-break {
+                page-break-before: always;
+            }
+            
+            /* Предотвращение разрыва таблиц */
+            .data-table thead {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+            
+            .data-table thead tr {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+            
+            .total-row {
+                page-break-inside: avoid;
+                page-break-before: avoid;
+                page-break-after: avoid;
+            }
+            
+            .signature-section {
+                page-break-inside: avoid;
+            }
+            
+            .methodology-section {
+                page-break-inside: avoid;
+            }
+        }
+
+        .methodology-section {
+            background: #f9f9f9;
+            padding: 10px;
+            border: 1px solid #ccc;
+            margin: 15px 0;
+        }
+
+        .methodology-section h4 {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .climate-projects {
+            margin-top: 15px;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+            border: 1px dashed #ccc;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Заголовок отчета -->
+    <div class="page-header">
+        <div class="page-title">
+            ОТЧЕТ О ВЫБРОСАХ ПАРНИКОВЫХ ГАЗОВ
+        </div>
+        <div class="page-subtitle">
+            в соответствии с Постановлением Правительства РФ от 20.04.2022 № 707
+        </div>
+        <div class="page-subtitle">
+            к Федеральному закону от 02.07.2021 № 296-ФЗ
+        </div>
+    </div>
+
+    <!-- 1.1 Реквизиты организации -->
+    <div class="section">
+        <h2 class="section-title">1. Реквизиты организации</h2>
+        <table class="org-info-table">
+            <tr>
+                <td class="label">Наименование организации:</td>
+                <td>[[org_name]]</td>
+            </tr>
+            <tr>
+                <td class="label">Организационно-правовая форма:</td>
+                <td>[[legal_form]]</td>
+            </tr>
+            <tr>
+                <td class="label">ОГРН:</td>
+                <td>[[ogrn]]</td>
+            </tr>
+            <tr>
+                <td class="label">ИНН:</td>
+                <td>[[inn]]</td>
+            </tr>
+            <tr>
+                <td class="label">ОКПО:</td>
+                <td>[[okpo]]</td>
+            </tr>
+            <tr>
+                <td class="label">ОКТМО:</td>
+                <td>[[oktmo]]</td>
+            </tr>
+            <tr>
+                <td class="label">ОКВЭД2 (основной):</td>
+                <td>[[okved]]</td>
+            </tr>
+            <tr>
+                <td class="label">Адрес (место нахождения):</td>
+                <td>[[address]]</td>
+            </tr>
+            <tr>
+                <td class="label">Адрес электронной почты:</td>
+                <td>[[email]]</td>
+            </tr>
+            <tr>
+                <td class="label">Контактный телефон:</td>
+                <td>[[phone]]</td>
+            </tr>
+            <tr>
+                <td class="label">Основание подачи отчета:</td>
+                <td>[[submission_basis]]</td>
+            </tr>
+            <tr>
+                <td class="label">Исполнитель (ФИО, телефон):</td>
+                <td>[[executor_fio]], тел. [[executor_phone]]</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- 1.2 Перечень процессов и объектов -->
+    <div class="section">
+        <h2 class="section-title">2. Перечень процессов и объектов</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 10%">Код процесса</th>
+                    <th style="width: 40%">Описание процесса/объекта</th>
+                    <th style="width: 15%">Код НВОС</th>
+                    <th style="width: 20%">Мощность/Производительность</th>
+                    <th style="width: 15%">Единица измерения</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>[[proc_1_code]]</td>
+                    <td class="text-left">[[proc_1_desc]]</td>
+                    <td>[[proc_1_nvos]]</td>
+                    <td class="text-right">[[proc_1_capacity]]</td>
+                    <td>[[proc_1_unit]]</td>
+                </tr>
+                <tr>
+                    <td>[[proc_2_code]]</td>
+                    <td class="text-left">[[proc_2_desc]]</td>
+                    <td>[[proc_2_nvos]]</td>
+                    <td class="text-right">[[proc_2_capacity]]</td>
+                    <td>[[proc_2_unit]]</td>
+                </tr>
+                <tr>
+                    <td>[[proc_3_code]]</td>
+                    <td class="text-left">[[proc_3_desc]]</td>
+                    <td>[[proc_3_nvos]]</td>
+                    <td class="text-right">[[proc_3_capacity]]</td>
+                    <td>[[proc_3_unit]]</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 1.3 Масса выбросов по газам -->
+    <div class="section">
+        <h2 class="section-title">3. Масса выбросов парниковых газов</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 25%">Парниковый газ</th>
+                    <th style="width: 20%">Масса выбросов, т</th>
+                    <th style="width: 15%">Потенциал глобального потепления</th>
+                    <th style="width: 25%">Масса выбросов в CO₂-эквиваленте, т</th>
+                    <th style="width: 15%">Доля, %</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-left">Диоксид углерода (CO₂)</td>
+                    <td class="text-right">[[co2_mass]]</td>
+                    <td class="text-center">1</td>
+                    <td class="text-right">[[co2e_co2]]</td>
+                    <td class="text-right">[[co2_percent]]</td>
+                </tr>
+                <tr>
+                    <td class="text-left">Метан (CH₄)</td>
+                    <td class="text-right">[[ch4_mass]]</td>
+                    <td class="text-center">25</td>
+                    <td class="text-right">[[co2e_ch4]]</td>
+                    <td class="text-right">[[ch4_percent]]</td>
+                </tr>
+                <tr>
+                    <td class="text-left">Закись азота (N₂O)</td>
+                    <td class="text-right">[[n2o_mass]]</td>
+                    <td class="text-center">298</td>
+                    <td class="text-right">[[co2e_n2o]]</td>
+                    <td class="text-right">[[n2o_percent]]</td>
+                </tr>
+                <tr>
+                    <td class="text-left">Гидрофторуглероды (HFC)</td>
+                    <td class="text-right">[[hfc_mass]]</td>
+                    <td class="text-center">[[hfc_gwp]]</td>
+                    <td class="text-right">[[co2e_hfc]]</td>
+                    <td class="text-right">[[hfc_percent]]</td>
+                </tr>
+                <tr>
+                    <td class="text-left">Перфторуглероды (PFC)</td>
+                    <td class="text-right">[[pfc_mass]]</td>
+                    <td class="text-center">[[pfc_gwp]]</td>
+                    <td class="text-right">[[co2e_pfc]]</td>
+                    <td class="text-right">[[pfc_percent]]</td>
+                </tr>
+                <tr>
+                    <td class="text-left">Гексафторид серы (SF₆)</td>
+                    <td class="text-right">[[sf6_mass]]</td>
+                    <td class="text-center">22800</td>
+                    <td class="text-right">[[co2e_sf6]]</td>
+                    <td class="text-right">[[sf6_percent]]</td>
+                </tr>
+                <tr class="total-row">
+                    <td class="text-left"><strong>ИТОГО:</strong></td>
+                    <td class="text-right"><strong>-</strong></td>
+                    <td class="text-center"><strong>-</strong></td>
+                    <td class="text-right"><strong>[[total_co2e]]</strong></td>
+                    <td class="text-right"><strong>100,0</strong></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 1.4 Методы и коэффициенты -->
+    <div class="section">
+        <h2 class="section-title">4. Методы определения и коэффициенты эмиссии</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 15%">Код процесса</th>
+                    <th style="width: 20%">Метод определения</th>
+                    <th style="width: 25%">Источник коэффициента эмиссии</th>
+                    <th style="width: 40%">Обоснование применения</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>[[proc_1_code]]</td>
+                    <td class="text-left">[[proc_1_method]]</td>
+                    <td class="text-left">[[proc_1_coef_src]]</td>
+                    <td class="text-left">[[proc_1_justif]]</td>
+                </tr>
+                <tr>
+                    <td>[[proc_2_code]]</td>
+                    <td class="text-left">[[proc_2_method]]</td>
+                    <td class="text-left">[[proc_2_coef_src]]</td>
+                    <td class="text-left">[[proc_2_justif]]</td>
+                </tr>
+                <tr>
+                    <td>[[proc_3_code]]</td>
+                    <td class="text-left">[[proc_3_method]]</td>
+                    <td class="text-left">[[proc_3_coef_src]]</td>
+                    <td class="text-left">[[proc_3_justif]]</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 1.5 Климатические проекты (опционально) -->
+    <div class="section climate-projects">
+        <h2 class="section-title">5. Климатические проекты (при наличии)</h2>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 30%">Название проекта</th>
+                    <th style="width: 15%">Период реализации с</th>
+                    <th style="width: 15%">Период реализации по</th>
+                    <th style="width: 25%">Сокращение выбросов, т CO₂-экв</th>
+                    <th style="width: 15%">Статус</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-left">[[climproj_1_name]]</td>
+                    <td>[[climproj_1_from]]</td>
+                    <td>[[climproj_1_to]]</td>
+                    <td class="text-right">[[climproj_1_reduced]]</td>
+                    <td>[[climproj_1_status]]</td>
+                </tr>
+                <tr>
+                    <td class="text-left">[[climproj_2_name]]</td>
+                    <td>[[climproj_2_from]]</td>
+                    <td>[[climproj_2_to]]</td>
+                    <td class="text-right">[[climproj_2_reduced]]</td>
+                    <td>[[climproj_2_status]]</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="no-data" id="no-climate-projects">
+            <p>Климатические проекты не реализуются</p>
+        </div>
+    </div>
+
+    <!-- Методология -->
+    <div class="methodology-section">
+        <h4>МЕТОДОЛОГИЯ РАСЧЕТА</h4>
+        <p>
+            Расчет выбросов парниковых газов выполнен в соответствии с методическими указаниями, 
+            утвержденными приказом Минприроды России от 27.05.2022 № 371 "Об утверждении методических 
+            указаний и руководства по количественному определению объема выбросов парниковых газов 
+            организациями, осуществляющими хозяйственную и иную деятельность в Российской Федерации".
+        </p>
+        <p style="margin-top: 8px;">
+            <strong>Применяемые коэффициенты эмиссии:</strong> [[emission_factors_source]], Приложение 10, табл. 2<br>
+            <strong>Потенциалы глобального потепления:</strong> IPCC AR4 (2007)<br>
+            <strong>Отчетный период:</strong> [[reporting_period]]
+        </p>
+    </div>
+
+    <!-- 1.6 Подпись -->
+    <div class="signature-section">
+        <h3 style="font-size: 12px; margin-bottom: 15px;">ПОДПИСЬ ОТВЕТСТВЕННОГО ЛИЦА</h3>
+        <div class="signature-grid">
+            <div>
+                <div class="signature-item">
+                    <div class="signature-label">Фамилия, имя, отчество:</div>
+                    <div class="signature-value">[[signer_fio]]</div>
+                </div>
+                <div class="signature-item">
+                    <div class="signature-label">Должность:</div>
+                    <div class="signature-value">[[signer_pos]]</div>
+                </div>
+            </div>
+            <div>
+                <div class="signature-item">
+                    <div class="signature-label">Тип электронной подписи:</div>
+                    <div class="signature-value">[[signer_sigtype]]</div>
+                </div>
+                <div class="signature-item">
+                    <div class="signature-label">Дата подписания:</div>
+                    <div class="signature-value">[[sign_date]]</div>
+                </div>
+            </div>
+        </div>
+        <div style="margin-top: 20px; text-align: center; font-size: 10px; color: #666;">
+            Подпись: _________________________ / [[signer_fio]] /
+        </div>
+    </div>
+
+    <!-- Футер -->
+    <div style="margin-top: 30px; text-align: center; font-size: 9px; color: #666; border-top: 1px solid #ccc; padding-top: 10px;">
+        <p>
+            Отчет сформирован автоматически в системе ESG-Lite<br>
+            Дата формирования: [[generation_date]] | Время: [[generation_time]]<br>
+            ID документа: [[document_id]]
+        </p>
+    </div>
+</body>
+</html>""

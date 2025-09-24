@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBAM Quarterly Report - [[org_name]]</title>
+    <style>
+        @font-face {
+            font-family: 'DejaVuSans';
+            src: url('/fonts/DejaVuSans.ttf') format('truetype');
+            font-weight: normal;
+        }
+        
+        @font-face {
+            font-family: 'DejaVuSans';
+            src: url('/fonts/DejaVuSans-Bold.ttf') format('truetype');
+            font-weight: bold;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DejaVuSans', Arial, sans-serif;
+            font-size: 10px;
+            line-height: 1.3;
+            color: #000;
+            background: white;
+            padding: 15px;
+        }
+
+        .page-header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #003d82;
+        }
+
+        .page-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #003d82;
+            text-transform: uppercase;
+        }
+
+        .page-subtitle {
+            font-size: 11px;
+            margin-bottom: 3px;
+            color: #666;
+        }
+
+        .regulation-ref {
+            font-size: 9px;
+            color: #888;
+            font-style: italic;
+        }
+
+        .eu-flag {
+            display: inline-block;
+            width: 20px;
+            height: 13px;
+            background: linear-gradient(to bottom, #003d82 0%, #003d82 100%);
+            margin-right: 8px;
+            position: relative;
+        }
+
+        .eu-flag::after {
+            content: '★';
+            position: absolute;
+            color: #ffcc00;
+            font-size: 8px;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .section {
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid #003d82;
+            color: #003d82;
+            text-transform: uppercase;
+        }
+
+        .declarant-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .declarant-table td {
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            font-size: 9px;
+            vertical-align: top;
+        }
+
+        .declarant-table .label {
+            background: #f0f4ff;
+            font-weight: bold;
+            width: 25%;
+            color: #003d82;
+        }
+
+        .goods-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 8px;
+        }
+
+        .goods-table th {
+            background: #003d82;
+            color: white;
+            padding: 6px 3px;
+            text-align: center;
+            font-weight: bold;
+            border: 1px solid #003d82;
+            font-size: 7px;
+            line-height: 1.2;
+        }
+
+        .goods-table td {
+            padding: 4px 3px;
+            border: 1px solid #ccc;
+            text-align: center;
+            vertical-align: middle;
+            font-size: 8px;
+        }
+
+        .goods-table .text-left {
+            text-align: left;
+        }
+
+        .goods-table .text-right {
+            text-align: right;
+        }
+
+        .total-row {
+            background: #f0f4ff;
+            font-weight: bold;
+        }
+
+        .note {
+            font-size: 8px;
+            color: #666;
+            font-style: italic;
+            margin-top: 5px;
+        }
+
+        .signature-section {
+            margin-top: 25px;
+            padding: 15px;
+            border: 1px solid #003d82;
+            background: #f0f4ff;
+        }
+
+        .signature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .signature-item {
+            border-bottom: 1px solid #003d82;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+        }
+
+        .signature-label {
+            font-size: 8px;
+            color: #666;
+            margin-bottom: 2px;
+        }
+
+        .signature-value {
+            font-size: 10px;
+            font-weight: bold;
+            min-height: 18px;
+        }
+
+
+
+        .no-goods {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-style: italic;
+            border: 2px dashed #ccc;
+            background: #f9f9f9;
+        }
+
+        @media print {
+            body {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                padding: 10px;
+            }
+            
+            .page-break {
+                page-break-before: always;
+            }
+            
+            .goods-table thead {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+            
+            .goods-table thead tr {
+                page-break-inside: avoid;
+                page-break-after: avoid;
+            }
+            
+            .total-row {
+                page-break-inside: avoid;
+                page-break-before: avoid;
+            }
+            
+            .signature-section {
+                page-break-inside: avoid;
+            }
+            
+            .totals-section {
+                page-break-inside: avoid;
+            }
+        }
+
+        .totals-section {
+            margin-top: 15px;
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 3px;
+        }
+
+        .totals-title {
+            font-size: 10px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #856404;
+        }
+
+        .totals-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .total-item {
+            font-size: 9px;
+        }
+
+        .total-value {
+            font-weight: bold;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <!-- Заголовок отчета -->
+    <div class="page-header">
+        <div class="page-title">
+            <span class="eu-flag"></span>
+            CBAM Quarterly Report
+        </div>
+        <div class="page-subtitle">
+            Carbon Border Adjustment Mechanism - Transitional Period
+        </div>
+        <div class="page-subtitle">
+            Reporting Quarter: [[report_year_q]]
+        </div>
+        <div class="regulation-ref">
+            EU Regulation 2023/956 | Implementing Regulation 2023/1773 (Annex I) | XSD v1.4.1.1
+        </div>
+    </div>
+
+    <!-- 1. Declarant Block -->
+    <div class="section">
+        <h2 class="section-title">1. Declarant Information</h2>
+        <table class="declarant-table">
+            <tr>
+                <td class="label">EORI Number:</td>
+                <td>[[eori]]</td>
+                <td class="label">CBAM Declarant ID:</td>
+                <td>[[cbam_id]]</td>
+            </tr>
+            <tr>
+                <td class="label">Legal Name:</td>
+                <td colspan="3">[[org_name]]</td>
+            </tr>
+            <tr>
+                <td class="label">Legal Address:</td>
+                <td colspan="3">[[org_address]]</td>
+            </tr>
+            <tr>
+                <td class="label">Country of Registration:</td>
+                <td>[[org_country]]</td>
+                <td class="label">Contact Email:</td>
+                <td>[[org_email]]</td>
+            </tr>
+            <tr>
+                <td class="label">Reporting Quarter:</td>
+                <td>[[report_year_q]]</td>
+                <td class="label">Report Generated:</td>
+                <td>[[generation_date]] [[generation_time]]</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- 2. Goods Lines (Annex I) -->
+    <div class="section">
+        <h2 class="section-title">2. CBAM Goods Declaration (Annex I)</h2>
+        
+        <div id="goods-section">
+            <table class="goods-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="width: 8%">CN Code</th>
+                        <th rowspan="2" style="width: 6%">Qty</th>
+                        <th rowspan="2" style="width: 5%">Unit</th>
+                        <th rowspan="2" style="width: 5%">Origin ISO</th>
+                        <th rowspan="2" style="width: 8%">UN/LOCODE</th>
+                        <th rowspan="2" style="width: 12%">Installation Name</th>
+                        <th colspan="2" style="width: 8%">Coordinates</th>
+                        <th rowspan="2" style="width: 8%">Prod. Route</th>
+                        <th rowspan="2" style="width: 6%">Direct tCO₂/t</th>
+                        <th rowspan="2" style="width: 6%">Elec MWh/t</th>
+                        <th rowspan="2" style="width: 6%">Elec EF tCO₂/MWh</th>
+                        <th rowspan="2" style="width: 6%">EF Method</th>
+                    <!-- EF Method codes: RM=residual mix, LMP=local marginal production, PP=power purchase agreement -->
+                        <th rowspan="2" style="width: 8%">Steel Mill ID</th>
+                        <th colspan="2" style="width: 8%">IP Input</th>
+                        <th colspan="2" style="width: 8%">IP Output</th>
+                    </tr>
+                    <tr>
+                        <th>Lat</th>
+                        <th>Lon</th>
+                        <th>t</th>
+                        <th>tCO₂</th>
+                        <th>t</th>
+                        <th>tCO₂</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Line 1 -->
+                    <tr>
+                        <td>[[l1_cn]]</td>
+                        <td class="text-right">[[l1_qty]]</td>
+                        <td>[[l1_unit]]</td>
+                        <td>[[l1_origin]]</td>
+                        <td>[[l1_unloc]]</td>
+                        <td class="text-left">[[l1_inst]]</td>
+                        <td>[[l1_lat]]</td>
+                        <td>[[l1_lon]]</td>
+                        <td>[[l1_route]]</td>
+                        <td class="text-right">[[l1_dir]]</td>
+                        <td class="text-right">[[l1_el_mwh]]</td>
+                        <td class="text-right">[[l1_el_ef]]</td>
+                        <td>[[l1_ef_meth]]</td>
+                        <td>[[l1_steel_id]]</td>
+                        <td class="text-right">[[l1_ip_in_qty]]</td>
+                        <td class="text-right">[[l1_ip_in_co2]]</td>
+                        <td class="text-right">[[l1_ip_out_qty]]</td>
+                        <td class="text-right">[[l1_ip_out_co2]]</td>
+                    </tr>
+                    
+                    <!-- Line 2 -->
+                    <tr>
+                        <td>[[l2_cn]]</td>
+                        <td class="text-right">[[l2_qty]]</td>
+                        <td>[[l2_unit]]</td>
+                        <td>[[l2_origin]]</td>
+                        <td>[[l2_unloc]]</td>
+                        <td class="text-left">[[l2_inst]]</td>
+                        <td>[[l2_lat]]</td>
+                        <td>[[l2_lon]]</td>
+                        <td>[[l2_route]]</td>
+                        <td class="text-right">[[l2_dir]]</td>
+                        <td class="text-right">[[l2_el_mwh]]</td>
+                        <td class="text-right">[[l2_el_ef]]</td>
+                        <td>[[l2_ef_meth]]</td>
+                        <td>[[l2_steel_id]]</td>
+                        <td class="text-right">[[l2_ip_in_qty]]</td>
+                        <td class="text-right">[[l2_ip_in_co2]]</td>
+                        <td class="text-right">[[l2_ip_out_qty]]</td>
+                        <td class="text-right">[[l2_ip_out_co2]]</td>
+                    </tr>
+                    
+                    <!-- Line 3 - Only show if has data -->
+                    <tr id="line3-row" style="display: none;">
+                        <td>[[l3_cn]]</td>
+                        <td class="text-right">[[l3_qty]]</td>
+                        <td>[[l3_unit]]</td>
+                        <td>[[l3_origin]]</td>
+                        <td>[[l3_unloc]]</td>
+                        <td class="text-left">[[l3_inst]]</td>
+                        <td>[[l3_lat]]</td>
+                        <td>[[l3_lon]]</td>
+                        <td>[[l3_route]]</td>
+                        <td class="text-right">[[l3_dir]]</td>
+                        <td class="text-right">[[l3_el_mwh]]</td>
+                        <td class="text-right">[[l3_el_ef]]</td>
+                        <td>[[l3_ef_meth]]</td>
+                        <td>[[l3_steel_id]]</td>
+                        <td class="text-right">[[l3_ip_in_qty]]</td>
+                        <td class="text-right">[[l3_ip_in_co2]]</td>
+                        <td class="text-right">[[l3_ip_out_qty]]</td>
+                        <td class="text-right">[[l3_ip_out_co2]]</td>
+                    </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Блок для пустого списка товаров -->
+        <div class="no-goods" id="no-cbam-goods" style="display: none;">
+            <p><strong>No goods subject to CBAM</strong></p>
+            <p>Отсутствуют товары, подпадающие под CBAM</p>
+            <p class="note">XML: &lt;CBAMGoods nil="true"/&gt;</p>
+        </div>
+        
+        <!-- XML Export Notes for Developers -->
+        <!-- 
+        XML Export Guidelines:
+        1. Only export rows with non-empty CN codes
+        2. For empty IP fields use: <InwardProcessing nil="true"/>
+        3. Root element: <CbamReport xmlns="urn:eu:cbam:report:1.4.1.1">
+        4. Validate with: xmllint --noout --schema CBAMReport.xsd report.xml
+        -->
+    </div>
+
+    <!-- Totals Section -->
+    <div class="totals-section">
+        <div class="totals-title">📊 Totals (for reference only)</div>
+        <div class="totals-grid">
+            <div class="total-item">
+                <span>Total Quantity:</span>
+                <span class="total-value">[[total_quantity]] tonnes</span>
+            </div>
+            <div class="total-item">
+                <span>Total Direct Emissions:</span>
+                <span class="total-value">[[total_direct_emissions]] tCO₂</span>
+            </div>
+            <div class="total-item">
+                <span>Total Indirect Emissions:</span>
+                <span class="total-value">[[total_indirect_emissions]] tCO₂</span>
+            </div>
+            <div class="total-item">
+                <span>Total Emissions:</span>
+                <span class="total-value">[[total_emissions]] tCO₂</span>
+            </div>
+        </div>
+        <div class="note">
+            Note: Totals are calculated automatically by the system. These values are for reference only and do not constitute official declaration totals.
+        </div>
+    </div>
+
+
+
+    <!-- 3. Signer Block -->
+    <div class="signature-section">
+        <h3 style="font-size: 11px; margin-bottom: 15px; color: #003d82;">3. Declarant Signature</h3>
+        <div class="signature-grid">
+            <div>
+                <div class="signature-item">
+                    <div class="signature-label">Declarant Name:</div>
+                    <div class="signature-value">[[signer_name]]</div>
+                </div>
+            </div>
+            <div>
+                <div class="signature-item">
+                    <div class="signature-label">Position:</div>
+                    <div class="signature-value">[[signer_pos]]</div>
+                </div>
+            </div>
+            <div>
+                <div class="signature-item">
+                    <div class="signature-label">Date (dd.mm.yyyy):</div>
+                    <div class="signature-value">[[sign_date]]</div>
+                </div>
+            </div>
+        </div>
+        <div class="note" style="margin-top: 15px; text-align: center;">
+            Note: Official signature is provided via Qualified Electronic Signature (QES) in the CBAM Transitional Registry.<br/>
+            This PDF document is for informational purposes only.
+        </div>
+    </div>
+
+    <!-- Футер -->
+    <div style="margin-top: 25px; text-align: center; font-size: 8px; color: #666; border-top: 1px solid #ccc; padding-top: 10px;">
+        <p>
+            Generated by ESG-Lite CBAM Module | XSD v1.4.1.1 compliant<br/>
+            Generation Date: [[generation_date]] | Time: [[generation_time]]<br/>
+            Document ID: [[document_id]] | Report Quarter: [[report_year_q]]
+        </p>
+        <p style="margin-top: 5px;">
+            <strong>Regulatory References:</strong><br/>
+            EU Regulation 2023/956 | Implementing Regulation 2023/1773 (Annex I)<br/>
+            CBAM Transitional Registry: <em>https://cbam.ec.europa.eu</em>
+        </p>
+    </div>
+</body>
+</html>

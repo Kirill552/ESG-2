@@ -1,0 +1,56 @@
+.qoder/
+.qoderignore
+.vscode/
+.github/
+
+# Секреты и конфиденциальные материалы
+authorized_key.json
+.env
+.env.*
+*.env
+*.env.local
+*.key
+*.pem
+*.pfx
+*.crt
+*.cer
+*.p12
+secret*/
+secrets/
+*.docx
+
+# Node.js зависимости
+node_modules/
+backend/node_modules/
+web/node_modules/
+
+# Сборки и кеши
+dist/
+build/
+out/
+.turbo/
+.cache/
+coverage/
+tmp/
+temp/
+logs/
+*.log
+
+# Next.js / Vite артефакты
+.next/
+backend/.next/
+backend/.vercel/
+backend/.turbo/
+web/dist/
+web/.vite/
+web/.turbo/
+web/.cache/
+
+# Загрузки и промежуточные файлы
+uploads/
+storage/
+data/
+*.sqlite
+*.db
+
+

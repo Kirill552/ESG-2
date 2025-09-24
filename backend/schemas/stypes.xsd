@@ -1,0 +1,403 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+  CBAM Shared Types XSD Schema (stypes.xsd)
+  Version: 1.4.1.1 (Production Release March 31, 2025)
+  Source: European Commission CBAM Transitional Registry
+  Date: 1 April 2025
+  
+  Общие типы данных для CBAM отчётности
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="http://ec.europa.eu/cbam/shared-types/v1"
+           xmlns:st="http://ec.europa.eu/cbam/shared-types/v1"
+           elementFormDefault="qualified">
+
+  <!-- Общие ограничения -->
+  
+  <!-- Текстовые поля различной длины -->
+  <xs:simpleType name="ShortTextType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="50"/>
+      <xs:minLength value="1"/>
+      <xs:whiteSpace value="collapse"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="MediumTextType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="200"/>
+      <xs:minLength value="1"/>
+      <xs:whiteSpace value="collapse"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="LongTextType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="1000"/>
+      <xs:whiteSpace value="preserve"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Идентификаторы -->
+  <xs:simpleType name="UUIDType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="ReferenceIDType">
+    <xs:restriction base="xs:string">
+      <xs:maxLength value="35"/>
+      <xs:minLength value="1"/>
+      <xs:pattern value="[A-Za-z0-9\-_.]+"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Численные значения с повышенной точностью -->
+  <xs:simpleType name="PreciseDecimalType">
+    <xs:restriction base="xs:decimal">
+      <xs:fractionDigits value="10"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="PercentageType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+      <xs:maxInclusive value="100"/>
+      <xs:fractionDigits value="2"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Временные интервалы -->
+  <xs:simpleType name="MonthType">
+    <xs:restriction base="xs:int">
+      <xs:minInclusive value="1"/>
+      <xs:maxInclusive value="12"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="DayType">
+    <xs:restriction base="xs:int">
+      <xs:minInclusive value="1"/>
+      <xs:maxInclusive value="31"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Расширенные коды стран (включая исторические) -->
+  <xs:simpleType name="ExtendedCountryCodeType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="AD"/> <!-- Андорра -->
+      <xs:enumeration value="AE"/> <!-- ОАЭ -->
+      <xs:enumeration value="AF"/> <!-- Афганистан -->
+      <xs:enumeration value="AG"/> <!-- Антигуа и Барбуда -->
+      <xs:enumeration value="AL"/> <!-- Албания -->
+      <xs:enumeration value="AM"/> <!-- Армения -->
+      <xs:enumeration value="AO"/> <!-- Ангола -->
+      <xs:enumeration value="AR"/> <!-- Аргентина -->
+      <xs:enumeration value="AT"/> <!-- Австрия -->
+      <xs:enumeration value="AU"/> <!-- Австралия -->
+      <xs:enumeration value="AZ"/> <!-- Азербайджан -->
+      <xs:enumeration value="BA"/> <!-- Босния и Герцеговина -->
+      <xs:enumeration value="BB"/> <!-- Барбадос -->
+      <xs:enumeration value="BD"/> <!-- Бангладеш -->
+      <xs:enumeration value="BE"/> <!-- Бельгия -->
+      <xs:enumeration value="BF"/> <!-- Буркина-Фасо -->
+      <xs:enumeration value="BG"/> <!-- Болгария -->
+      <xs:enumeration value="BH"/> <!-- Бахрейн -->
+      <xs:enumeration value="BI"/> <!-- Бурунди -->
+      <xs:enumeration value="BJ"/> <!-- Бенин -->
+      <xs:enumeration value="BN"/> <!-- Бруней -->
+      <xs:enumeration value="BO"/> <!-- Боливия -->
+      <xs:enumeration value="BR"/> <!-- Бразилия -->
+      <xs:enumeration value="BS"/> <!-- Багамы -->
+      <xs:enumeration value="BT"/> <!-- Бутан -->
+      <xs:enumeration value="BW"/> <!-- Ботсвана -->
+      <xs:enumeration value="BY"/> <!-- Беларусь -->
+      <xs:enumeration value="BZ"/> <!-- Белиз -->
+      <xs:enumeration value="CA"/> <!-- Канада -->
+      <xs:enumeration value="CD"/> <!-- ДР Конго -->
+      <xs:enumeration value="CF"/> <!-- ЦАР -->
+      <xs:enumeration value="CG"/> <!-- Конго -->
+      <xs:enumeration value="CH"/> <!-- Швейцария -->
+      <xs:enumeration value="CI"/> <!-- Кот-д'Ивуар -->
+      <xs:enumeration value="CL"/> <!-- Чили -->
+      <xs:enumeration value="CM"/> <!-- Камерун -->
+      <xs:enumeration value="CN"/> <!-- Китай -->
+      <xs:enumeration value="CO"/> <!-- Колумбия -->
+      <xs:enumeration value="CR"/> <!-- Коста-Рика -->
+      <xs:enumeration value="CU"/> <!-- Куба -->
+      <xs:enumeration value="CV"/> <!-- Кабо-Верде -->
+      <xs:enumeration value="CY"/> <!-- Кипр -->
+      <xs:enumeration value="CZ"/> <!-- Чехия -->
+      <xs:enumeration value="DE"/> <!-- Германия -->
+      <xs:enumeration value="DJ"/> <!-- Джибути -->
+      <xs:enumeration value="DK"/> <!-- Дания -->
+      <xs:enumeration value="DM"/> <!-- Доминика -->
+      <xs:enumeration value="DO"/> <!-- Доминиканская Республика -->
+      <xs:enumeration value="DZ"/> <!-- Алжир -->
+      <xs:enumeration value="EC"/> <!-- Эквадор -->
+      <xs:enumeration value="EE"/> <!-- Эстония -->
+      <xs:enumeration value="EG"/> <!-- Египет -->
+      <xs:enumeration value="ER"/> <!-- Эритрея -->
+      <xs:enumeration value="ES"/> <!-- Испания -->
+      <xs:enumeration value="ET"/> <!-- Эфиопия -->
+      <xs:enumeration value="FI"/> <!-- Финляндия -->
+      <xs:enumeration value="FJ"/> <!-- Фиджи -->
+      <xs:enumeration value="FM"/> <!-- Микронезия -->
+      <xs:enumeration value="FR"/> <!-- Франция -->
+      <xs:enumeration value="GA"/> <!-- Габон -->
+      <xs:enumeration value="GB"/> <!-- Великобритания -->
+      <xs:enumeration value="GD"/> <!-- Гренада -->
+      <xs:enumeration value="GE"/> <!-- Грузия -->
+      <xs:enumeration value="GH"/> <!-- Гана -->
+      <xs:enumeration value="GM"/> <!-- Гамбия -->
+      <xs:enumeration value="GN"/> <!-- Гвинея -->
+      <xs:enumeration value="GQ"/> <!-- Экваториальная Гвинея -->
+      <xs:enumeration value="GR"/> <!-- Греция -->
+      <xs:enumeration value="GT"/> <!-- Гватемала -->
+      <xs:enumeration value="GW"/> <!-- Гвинея-Бисау -->
+      <xs:enumeration value="GY"/> <!-- Гайана -->
+      <xs:enumeration value="HN"/> <!-- Гондурас -->
+      <xs:enumeration value="HR"/> <!-- Хорватия -->
+      <xs:enumeration value="HT"/> <!-- Гаити -->
+      <xs:enumeration value="HU"/> <!-- Венгрия -->
+      <xs:enumeration value="ID"/> <!-- Индонезия -->
+      <xs:enumeration value="IE"/> <!-- Ирландия -->
+      <xs:enumeration value="IL"/> <!-- Израиль -->
+      <xs:enumeration value="IN"/> <!-- Индия -->
+      <xs:enumeration value="IQ"/> <!-- Ирак -->
+      <xs:enumeration value="IR"/> <!-- Иран -->
+      <xs:enumeration value="IS"/> <!-- Исландия -->
+      <xs:enumeration value="IT"/> <!-- Италия -->
+      <xs:enumeration value="JM"/> <!-- Ямайка -->
+      <xs:enumeration value="JO"/> <!-- Иордания -->
+      <xs:enumeration value="JP"/> <!-- Япония -->
+      <xs:enumeration value="KE"/> <!-- Кения -->
+      <xs:enumeration value="KG"/> <!-- Киргизия -->
+      <xs:enumeration value="KH"/> <!-- Камбоджа -->
+      <xs:enumeration value="KI"/> <!-- Кирибати -->
+      <xs:enumeration value="KM"/> <!-- Коморы -->
+      <xs:enumeration value="KN"/> <!-- Сент-Китс и Невис -->
+      <xs:enumeration value="KP"/> <!-- КНДР -->
+      <xs:enumeration value="KR"/> <!-- Южная Корея -->
+      <xs:enumeration value="KW"/> <!-- Кувейт -->
+      <xs:enumeration value="KZ"/> <!-- Казахстан -->
+      <xs:enumeration value="LA"/> <!-- Лаос -->
+      <xs:enumeration value="LB"/> <!-- Ливан -->
+      <xs:enumeration value="LC"/> <!-- Сент-Люсия -->
+      <xs:enumeration value="LI"/> <!-- Лихтенштейн -->
+      <xs:enumeration value="LK"/> <!-- Шри-Ланка -->
+      <xs:enumeration value="LR"/> <!-- Либерия -->
+      <xs:enumeration value="LS"/> <!-- Лесото -->
+      <xs:enumeration value="LT"/> <!-- Литва -->
+      <xs:enumeration value="LU"/> <!-- Люксембург -->
+      <xs:enumeration value="LV"/> <!-- Латвия -->
+      <xs:enumeration value="LY"/> <!-- Ливия -->
+      <xs:enumeration value="MA"/> <!-- Марокко -->
+      <xs:enumeration value="MC"/> <!-- Монако -->
+      <xs:enumeration value="MD"/> <!-- Молдова -->
+      <xs:enumeration value="ME"/> <!-- Черногория -->
+      <xs:enumeration value="MG"/> <!-- Мадагаскар -->
+      <xs:enumeration value="MH"/> <!-- Маршалловы острова -->
+      <xs:enumeration value="MK"/> <!-- Северная Македония -->
+      <xs:enumeration value="ML"/> <!-- Мали -->
+      <xs:enumeration value="MM"/> <!-- Мьянма -->
+      <xs:enumeration value="MN"/> <!-- Монголия -->
+      <xs:enumeration value="MR"/> <!-- Мавритания -->
+      <xs:enumeration value="MT"/> <!-- Мальта -->
+      <xs:enumeration value="MU"/> <!-- Маврикий -->
+      <xs:enumeration value="MV"/> <!-- Мальдивы -->
+      <xs:enumeration value="MW"/> <!-- Малави -->
+      <xs:enumeration value="MX"/> <!-- Мексика -->
+      <xs:enumeration value="MY"/> <!-- Малайзия -->
+      <xs:enumeration value="MZ"/> <!-- Мозамбик -->
+      <xs:enumeration value="NA"/> <!-- Намибия -->
+      <xs:enumeration value="NE"/> <!-- Нигер -->
+      <xs:enumeration value="NG"/> <!-- Нигерия -->
+      <xs:enumeration value="NI"/> <!-- Никарагуа -->
+      <xs:enumeration value="NL"/> <!-- Нидерланды -->
+      <xs:enumeration value="NO"/> <!-- Норвегия -->
+      <xs:enumeration value="NP"/> <!-- Непал -->
+      <xs:enumeration value="NR"/> <!-- Науру -->
+      <xs:enumeration value="NZ"/> <!-- Новая Зеландия -->
+      <xs:enumeration value="OM"/> <!-- Оман -->
+      <xs:enumeration value="PA"/> <!-- Панама -->
+      <xs:enumeration value="PE"/> <!-- Перу -->
+      <xs:enumeration value="PG"/> <!-- Папуа — Новая Гвинея -->
+      <xs:enumeration value="PH"/> <!-- Филиппины -->
+      <xs:enumeration value="PK"/> <!-- Пакистан -->
+      <xs:enumeration value="PL"/> <!-- Польша -->
+      <xs:enumeration value="PT"/> <!-- Португалия -->
+      <xs:enumeration value="PW"/> <!-- Палау -->
+      <xs:enumeration value="PY"/> <!-- Парагвай -->
+      <xs:enumeration value="QA"/> <!-- Катар -->
+      <xs:enumeration value="RO"/> <!-- Румыния -->
+      <xs:enumeration value="RS"/> <!-- Сербия -->
+      <xs:enumeration value="RU"/> <!-- Россия -->
+      <xs:enumeration value="RW"/> <!-- Руанда -->
+      <xs:enumeration value="SA"/> <!-- Саудовская Аравия -->
+      <xs:enumeration value="SB"/> <!-- Соломоновы острова -->
+      <xs:enumeration value="SC"/> <!-- Сейшелы -->
+      <xs:enumeration value="SD"/> <!-- Судан -->
+      <xs:enumeration value="SE"/> <!-- Швеция -->
+      <xs:enumeration value="SG"/> <!-- Сингапур -->
+      <xs:enumeration value="SI"/> <!-- Словения -->
+      <xs:enumeration value="SK"/> <!-- Словакия -->
+      <xs:enumeration value="SL"/> <!-- Сьерра-Леоне -->
+      <xs:enumeration value="SM"/> <!-- Сан-Марино -->
+      <xs:enumeration value="SN"/> <!-- Сенегал -->
+      <xs:enumeration value="SO"/> <!-- Сомали -->
+      <xs:enumeration value="SR"/> <!-- Суринам -->
+      <xs:enumeration value="SS"/> <!-- Южный Судан -->
+      <xs:enumeration value="ST"/> <!-- Сан-Томе и Принсипи -->
+      <xs:enumeration value="SV"/> <!-- Сальвадор -->
+      <xs:enumeration value="SY"/> <!-- Сирия -->
+      <xs:enumeration value="SZ"/> <!-- Эсватини -->
+      <xs:enumeration value="TD"/> <!-- Чад -->
+      <xs:enumeration value="TG"/> <!-- Того -->
+      <xs:enumeration value="TH"/> <!-- Таиланд -->
+      <xs:enumeration value="TJ"/> <!-- Таджикистан -->
+      <xs:enumeration value="TL"/> <!-- Восточный Тимор -->
+      <xs:enumeration value="TM"/> <!-- Туркменистан -->
+      <xs:enumeration value="TN"/> <!-- Тунис -->
+      <xs:enumeration value="TO"/> <!-- Тонга -->
+      <xs:enumeration value="TR"/> <!-- Турция -->
+      <xs:enumeration value="TT"/> <!-- Тринидад и Тобаго -->
+      <xs:enumeration value="TV"/> <!-- Тувалу -->
+      <xs:enumeration value="TW"/> <!-- Тайвань -->
+      <xs:enumeration value="TZ"/> <!-- Танзания -->
+      <xs:enumeration value="UA"/> <!-- Украина -->
+      <xs:enumeration value="UG"/> <!-- Уганда -->
+      <xs:enumeration value="US"/> <!-- США -->
+      <xs:enumeration value="UY"/> <!-- Уругвай -->
+      <xs:enumeration value="UZ"/> <!-- Узбекистан -->
+      <xs:enumeration value="VA"/> <!-- Ватикан -->
+      <xs:enumeration value="VC"/> <!-- Сент-Винсент и Гренадины -->
+      <xs:enumeration value="VE"/> <!-- Венесуэла -->
+      <xs:enumeration value="VN"/> <!-- Вьетнам -->
+      <xs:enumeration value="VU"/> <!-- Вануату -->
+      <xs:enumeration value="WS"/> <!-- Самоа -->
+      <xs:enumeration value="YE"/> <!-- Йемен -->
+      <xs:enumeration value="ZA"/> <!-- ЮАР -->
+      <xs:enumeration value="ZM"/> <!-- Замбия -->
+      <xs:enumeration value="ZW"/> <!-- Зимбабве -->
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Расширенные коды валют -->
+  <xs:simpleType name="ExtendedCurrencyCodeType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="EUR"/> <!-- Евро -->
+      <xs:enumeration value="USD"/> <!-- Доллар США -->
+      <xs:enumeration value="GBP"/> <!-- Фунт стерлингов -->
+      <xs:enumeration value="JPY"/> <!-- Японская иена -->
+      <xs:enumeration value="CHF"/> <!-- Швейцарский франк -->
+      <xs:enumeration value="CAD"/> <!-- Канадский доллар -->
+      <xs:enumeration value="AUD"/> <!-- Австралийский доллар -->
+      <xs:enumeration value="CNY"/> <!-- Китайский юань -->
+      <xs:enumeration value="RUB"/> <!-- Российский рубль -->
+      <xs:enumeration value="INR"/> <!-- Индийская рупия -->
+      <xs:enumeration value="BRL"/> <!-- Бразильский реал -->
+      <xs:enumeration value="KRW"/> <!-- Южнокорейская вона -->
+      <xs:enumeration value="MXN"/> <!-- Мексиканское песо -->
+      <xs:enumeration value="ZAR"/> <!-- Южноафриканский ранд -->
+      <xs:enumeration value="SGD"/> <!-- Сингапурский доллар -->
+      <xs:enumeration value="SEK"/> <!-- Шведская крона -->
+      <xs:enumeration value="NOK"/> <!-- Норвежская крона -->
+      <xs:enumeration value="DKK"/> <!-- Датская крона -->
+      <xs:enumeration value="PLN"/> <!-- Польский злотый -->
+      <xs:enumeration value="CZK"/> <!-- Чешская крона -->
+      <xs:enumeration value="HUF"/> <!-- Венгерский форинт -->
+      <xs:enumeration value="RON"/> <!-- Румынский лей -->
+      <xs:enumeration value="BGN"/> <!-- Болгарский лев -->
+      <xs:enumeration value="HRK"/> <!-- Хорватская куна -->
+      <xs:enumeration value="TRY"/> <!-- Турецкая лира -->
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Сложные типы для повторного использования -->
+  
+  <!-- Временной диапазон -->
+  <xs:complexType name="DateRangeType">
+    <xs:sequence>
+      <xs:element name="StartDate" type="xs:date"/>
+      <xs:element name="EndDate" type="xs:date"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Многоязычный текст -->
+  <xs:complexType name="MultilingualTextType">
+    <xs:sequence>
+      <xs:element name="Text" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base="st:LongTextType">
+              <xs:attribute name="lang" type="st:LanguageCodeType" use="required"/>
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Расширенные коды языков -->
+  <xs:simpleType name="LanguageCodeType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="BG"/> <!-- болгарский -->
+      <xs:enumeration value="CS"/> <!-- чешский -->
+      <xs:enumeration value="DA"/> <!-- датский -->
+      <xs:enumeration value="DE"/> <!-- немецкий -->
+      <xs:enumeration value="EL"/> <!-- греческий -->
+      <xs:enumeration value="EN"/> <!-- английский -->
+      <xs:enumeration value="ES"/> <!-- испанский -->
+      <xs:enumeration value="ET"/> <!-- эстонский -->
+      <xs:enumeration value="FI"/> <!-- финский -->
+      <xs:enumeration value="FR"/> <!-- французский -->
+      <xs:enumeration value="GA"/> <!-- ирландский -->
+      <xs:enumeration value="HR"/> <!-- хорватский -->
+      <xs:enumeration value="HU"/> <!-- венгерский -->
+      <xs:enumeration value="IT"/> <!-- итальянский -->
+      <xs:enumeration value="LT"/> <!-- литовский -->
+      <xs:enumeration value="LV"/> <!-- латышский -->
+      <xs:enumeration value="MT"/> <!-- мальтийский -->
+      <xs:enumeration value="NL"/> <!-- голландский -->
+      <xs:enumeration value="PL"/> <!-- польский -->
+      <xs:enumeration value="PT"/> <!-- португальский -->
+      <xs:enumeration value="RO"/> <!-- румынский -->
+      <xs:enumeration value="SK"/> <!-- словацкий -->
+      <xs:enumeration value="SL"/> <!-- словенский -->
+      <xs:enumeration value="SV"/> <!-- шведский -->
+      <xs:enumeration value="RU"/> <!-- русский -->
+      <xs:enumeration value="UK"/> <!-- украинский -->
+      <xs:enumeration value="ZH"/> <!-- китайский -->
+      <xs:enumeration value="JA"/> <!-- японский -->
+      <xs:enumeration value="KO"/> <!-- корейский -->
+      <xs:enumeration value="AR"/> <!-- арабский -->
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- Метаданные -->
+  <xs:complexType name="MetadataType">
+    <xs:sequence>
+      <xs:element name="CreatedBy" type="st:MediumTextType"/>
+      <xs:element name="CreatedAt" type="xs:dateTime"/>
+      <xs:element name="ModifiedBy" type="st:MediumTextType" minOccurs="0"/>
+      <xs:element name="ModifiedAt" type="xs:dateTime" minOccurs="0"/>
+      <xs:element name="Version" type="st:ShortTextType"/>
+      <xs:element name="Status" type="st:StatusEnum"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- Статусы -->
+  <xs:simpleType name="StatusEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="DRAFT"/>
+      <xs:enumeration value="SUBMITTED"/>
+      <xs:enumeration value="UNDER_REVIEW"/>
+      <xs:enumeration value="APPROVED"/>
+      <xs:enumeration value="REJECTED"/>
+      <xs:enumeration value="CANCELLED"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+</xs:schema>

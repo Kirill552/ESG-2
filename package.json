@@ -1,0 +1,61 @@
+{
+  "name": "esg-2-backend",
+  "version": "1.0.0",
+  "description": "ESG-2 Backend - Российская B2B SaaS платформа для автоматизации углеродной отчетности",
+  "keywords": [
+    "esg",
+    "carbon",
+    "emissions",
+    "russia",
+    "296fz",
+    "cbam",
+    "backend",
+    "api"
+  ],
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Backend разработка ведется в папке backend/'",
+    "backend:dev": "cd backend && npm run dev",
+    "backend:build": "cd backend && npm run build",
+    "backend:start": "cd backend && npm run start",
+    "install:backend": "cd backend && npm install"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.2.2",
+    "@radix-ui/react-avatar": "^1.1.10",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-label": "^2.1.7",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@tanstack/react-query": "^5.90.1",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "framer-motion": "^12.23.18",
+    "lucide-react": "^0.544.0",
+    "next-auth": "^5.0.0-beta.29",
+    "react-dropzone": "^14.3.8",
+    "react-hook-form": "^7.63.0",
+    "react-pdf": "^10.1.0",
+    "recharts": "^3.2.1",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7",
+    "zod": "^4.1.11",
+    "zustand": "^5.0.8"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "author": {
+    "name": "ESG-2 Team",
+    "email": "team@esg2.ru"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,335 @@
+// Backup current schema before modifications
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String     @id @default(cuid())
+  clerkId    String     @unique
+  email      String     @unique
+  firstName  String?
+  lastName   String?
+  planType   PlanType   @default(FREE)
+  planExpiry DateTime?
+  usageStats Json?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  credits    credits?
+  documents  Document[]
+  payments   Payment[]
+  reports    Report[]
+
+  @@map("users")
+}
+
+model Document {
+  id                    String         @id @default(cuid())
+  userId                String
+  fileName              String
+  originalName          String
+  filePath              String
+  fileSize              Int
+  fileType              String
+  status                DocumentStatus @default(UPLOADED)
+  ocrProcessed          Boolean        @default(false)
+  ocrData               Json?
+  ocrConfidence         Float?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  processingProgress    Int?           @default(0)
+  processingStage       String?
+  processingMessage     String?
+  jobId                 String?
+  processingCompletedAt DateTime?
+  processingStartedAt   DateTime?
+  queueStatus           QueueStatus?
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports               Report[]
+
+  @@index([processingStage])
+  @@index([jobId])
+  @@index([queueStatus])
+  @@index([userId, queueStatus])
+  @@index([userId, status])
+  @@index([queueStatus, processingStartedAt])
+  @@index([processingCompletedAt])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@map("documents")
+}
+
+model Report {
+  id            String     @id @default(cuid())
+  userId        String
+  documentId    String?
+  reportType    ReportType
+  format        String
+  fileName      String
+  filePath      String
+  fileSize      Int?
+  emissionData  Json
+  methodology   String     @default("296-ФЗ от 02.07.2021")
+  downloadCount Int        @default(0)
+  lastDownload  DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  document      Document?  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  userId      String
+  amount      Decimal       @db.Decimal(10, 2)
+  currency    String        @default("RUB")
+  planType    PlanType
+  yookassaId  String?       @unique
+  paymentUrl  String?
+  status      PaymentStatus @default(PENDING)
+  metadata    Json?
+  description String?
+  paidAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model RateLimit {
+  id             String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  organizationId String
+  requestCount   Int      @default(0)
+  windowStart    DateTime @default(now()) @db.Timestamp(6)
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@unique([organizationId, windowStart])
+  @@index([organizationId])
+  @@index([windowStart])
+  @@map("rate_limits")
+}
+
+model MonetizationSettings {
+  id                  String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  organizationId      String   @unique
+  surgePricingEnabled Boolean  @default(true)
+  surgeMultiplier     Float    @default(2.0)
+  creditCostPerTon    Float    @default(5.0)
+  cbamAddonCostPerTon Float    @default(3.0)
+  rateLimit           Int      @default(10)
+  rateLimitWindowSec  Int      @default(90)
+  createdAt           DateTime @default(now()) @db.Timestamp(6)
+  updatedAt           DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@index([organizationId])
+  @@map("monetization_settings")
+}
+
+model QueueJob {
+  id           String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name         String
+  data         Json?
+  priority     Int           @default(0)
+  state        QueueJobState @default(CREATED)
+  retryLimit   Int           @default(3)
+  retryCount   Int           @default(0)
+  retryDelay   Int           @default(0)
+  retryBackoff Boolean       @default(false)
+  startAfter   DateTime      @default(now()) @db.Timestamp(6)
+  startedOn    DateTime?     @db.Timestamp(6)
+  singletonKey String?
+  singletonOn  DateTime?     @db.Timestamp(6)
+  expireIn     String?
+  createdOn    DateTime      @default(now()) @db.Timestamp(6)
+  completedOn  DateTime?     @db.Timestamp(6)
+  keepUntil    DateTime?     @db.Timestamp(6)
+  output       Json?
+  deadLetter   String?
+  policy       String?
+  logs         QueueJobLog[]
+
+  @@index([name])
+  @@index([state])
+  @@index([priority])
+  @@index([name, state])
+  @@index([startAfter])
+  @@index([createdOn])
+  @@index([completedOn])
+  @@index([singletonKey])
+  @@index([keepUntil])
+  @@map("queue_jobs")
+}
+
+model QueueJobLog {
+  id        String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  jobId     String
+  level     QueueLogLevel @default(INFO)
+  message   String
+  data      Json?
+  createdOn DateTime      @default(now()) @db.Timestamp(6)
+  job       QueueJob      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([level])
+  @@index([createdOn])
+  @@map("queue_job_logs")
+}
+
+model QueueMetric {
+  id          String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  metricType  String
+  metricValue Float
+  metadata    Json?
+  timestamp   DateTime @default(now()) @db.Timestamp(6)
+  expiresAt   DateTime @db.Timestamp(6)
+
+  @@index([metricType])
+  @@index([timestamp])
+  @@index([expiresAt])
+  @@index([metricType, timestamp])
+  @@map("queue_metrics")
+}
+
+model credit_transactions {
+  id          String                @id @default(dbgenerated("(gen_random_uuid())::text"))
+  creditsId   String
+  type        CreditTransactionType
+  amount      Int
+  description String
+  metadata    Json?
+  createdAt   DateTime              @default(now()) @db.Timestamp(6)
+  credits     credits               @relation(fields: [creditsId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([createdAt])
+  @@index([creditsId])
+  @@index([type])
+}
+
+model credits {
+  id                  String                @id @default(dbgenerated("(gen_random_uuid())::text"))
+  userId              String                @unique
+  balance             Int                   @default(1000)
+  totalPurchased      Int                   @default(1000)
+  totalUsed           Int                   @default(0)
+  lastTopUp           DateTime?             @db.Timestamp(6)
+  createdAt           DateTime              @default(now()) @db.Timestamp(6)
+  updatedAt           DateTime              @default(now()) @db.Timestamp(6)
+  organizationId      String?
+  credit_transactions credit_transactions[]
+  users               User                  @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model organization_credits {
+  id             String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  organizationId String    @unique
+  balance        Int       @default(1000)
+  totalPurchased Int       @default(1000)
+  totalUsed      Int       @default(0)
+  planType       String    @default("FREE")
+  planExpiry     DateTime?
+  lastTopUp      DateTime? @db.Timestamp(6)
+  createdAt      DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime  @default(now()) @db.Timestamp(6)
+
+  @@index([organizationId])
+  @@index([planType])
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+  ARCHIVED
+  QUEUED
+}
+
+enum ReportType {
+  REPORT_296FZ
+  CBAM_XML
+  CBAM_CSV
+}
+
+enum PlanType {
+  FREE
+  STANDARD
+  PREMIUM
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  DEBIT
+  REFUND
+  BONUS
+}
+
+enum QueueStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+  STALLED
+}
+
+enum QueueJobState {
+  CREATED
+  RETRY
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum QueueLogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}

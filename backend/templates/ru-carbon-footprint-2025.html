@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Углеродный след [[org_name]] — [[report_year]]</title>
+  <style>
+    @font-face {
+      font-family: 'DejaVuSans';
+      src: url('/fonts/DejaVuSans.ttf') format('truetype');
+      font-weight: normal;
+    }
+    @font-face {
+      font-family: 'DejaVuSans';
+      src: url('/fonts/DejaVuSans-Bold.ttf') format('truetype');
+      font-weight: bold;
+    }
+    body { font-family: 'DejaVuSans', Arial, sans-serif; padding: 24px; color: #000; }
+    h1 { font-size: 18px; margin: 0 0 6px; }
+    h2 { font-size: 14px; margin: 16px 0 8px; }
+    p, td, th { font-size: 11px; }
+    .meta { margin: 8px 0 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 6px; }
+    th, td { border: 1px solid #000; padding: 6px; text-align: left; }
+    th { background: #f0f0f0; }
+    .muted { color: #555; }
+    .summary { background: #fafafa; border: 1px solid #ddd; padding: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Отчет по углеродному следу (2025)</h1>
+  <div class="meta">
+    <div><strong>Организация:</strong> [[org_name]] (ИНН [[org_inn]])</div>
+    <div><strong>Адрес:</strong> [[org_address]]</div>
+    <div><strong>Отчетный год:</strong> [[report_year]]</div>
+    <div><strong>Идентификатор документа:</strong> [[document_id]]</div>
+    <div class="muted">Сформировано: [[generation_date]] [[generation_time]]</div>
+  </div>
+
+  <div class="summary">
+    <strong>Итоги выбросов, т CO₂‑экв:</strong>
+    <div>Scope 1 (прямые): [[scope1]]</div>
+    <div>Scope 2 (косвенные от энергии): [[scope2]]</div>
+    <div>Scope 3 (прочие косвенные): [[scope3]]</div>
+    <div><strong>Всего:</strong> [[total_co2e]]</div>
+    <div>Интенсивность (при наличии): [[intensity]]</div>
+    <div>Качество данных: [[data_quality]]</div>
+    <div>Методика: [[methodology]]</div>
+  </div>
+
+  <h2>Подписант</h2>
+  <div class="grid">
+    <div>
+      <div class="muted">ФИО</div>
+      <div>[[signer_name]]</div>
+    </div>
+    <div>
+      <div class="muted">Должность</div>
+      <div>[[signer_position]]</div>
+    </div>
+  </div>
+  <div class="grid" style="margin-top: 8px;">
+    <div>
+      <div class="muted">Дата</div>
+      <div>[[sign_date]]</div>
+    </div>
+  </div>
+</body>
+</html>

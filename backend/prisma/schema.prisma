@@ -1,0 +1,917 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  FINANCE_ADMIN
+  SUPPORT_ADMIN
+  SYSTEM_ADMIN
+}
+
+model User {
+  id         String     @id @default(cuid())
+  email      String     @unique
+  phone      String?    @unique  // Поддержка телефонной авторизации
+  name       String?    // Объединенное имя для NextAuth
+  firstName  String?
+  lastName   String?
+  emailVerified DateTime?  // Для NextAuth
+  phoneVerified DateTime?  // Верификация телефона
+  image      String?       // Для NextAuth
+  isBlocked  Boolean    @default(false)
+  planExpiry DateTime?
+  usageStats Json?
+  lastLoginAt DateTime?  // Последний вход для безопасности
+  hashedPassword String?   // Хешированный пароль для входа
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  planType   PlanType   @default(TRIAL)
+  totpSecret String?
+  // Активная организация пользователя
+  activeOrganizationId String?
+  // удалены кредиты
+  documents  Document[]
+  payments   Payment[]
+  reports    Report[]
+  organization Organization? // Один пользователь может владеть одной организацией
+  organizationMemberships OrganizationUser[]
+  activeOrganization Organization? @relation("UserActiveOrganization", fields: [activeOrganizationId], references: [id])
+  accounts   Account[]
+  sessions   Session[]
+  backupCodes BackupCode[]
+  webAuthnCredentials WebAuthnCredential[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+// WebAuthn Passkeys модель для биометрической аутентификации
+model WebAuthnCredential {
+  id            String   @id @default(cuid())
+  userId        String
+  credentialId  String   @unique
+  publicKey     Bytes
+  counter       BigInt   @default(0)
+  transports    String[]  // usb, nfc, ble, internal
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([credentialId])
+  @@map("webauthn_credentials")
+}
+
+model Document {
+  id                    String         @id @default(cuid())
+  userId                String
+  fileName              String
+  originalName          String
+  filePath              String
+  fileSize              Int
+  fileType              String
+  fileHash              String?        // sha256 хеш содержимого файла для дедупликации
+  status                DocumentStatus @default(UPLOADED)
+  ocrProcessed          Boolean        @default(false)
+  ocrData               Json?
+  ocrConfidence         Float?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  processingProgress    Int?           @default(0)
+  processingStage       String?
+  processingMessage     String?
+  jobId                 String?
+  processingCompletedAt DateTime?
+  processingStartedAt   DateTime?
+  queueStatus           QueueStatus?
+  user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports               Report[]
+
+  @@index([processingStage])
+  @@index([jobId])
+  @@index([queueStatus])
+  @@index([userId, queueStatus])
+  @@index([userId, status])
+  @@index([queueStatus, processingStartedAt])
+  @@index([processingCompletedAt])
+  @@index([fileHash])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@map("documents")
+}
+
+model Report {
+  id                String             @id @default(cuid())
+  userId            String
+  documentId        String?
+  reportType        ReportType
+  format            String
+  fileName          String
+  filePath          String
+  fileSize          Int?
+  emissionData      Json
+  methodology       String             @default("296-ФЗ от 02.07.2021")
+  downloadCount     Int                @default(0)
+  lastDownload      DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  version           Int                @default(1)
+  isLocked          Boolean            @default(false)
+  signedAt          DateTime?
+  signedBy          String?
+  dataHash          String?
+  currentSnapshotId String?
+  archivedAt        DateTime?
+  snapshots         ReportSnapshot[]
+  validations       ReportValidation[]
+  document          Document?          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reports")
+}
+
+/// Неизменяемые снапшоты подписанных отчетов
+model ReportSnapshot {
+  id             String   @id @default(cuid())
+  reportId       String
+  version        Int      @default(1)
+  dataHash       String
+  methodVersions String[]
+  factorVersions String[]
+  signedBy       String
+  signedAt       DateTime @default(now())
+  signature      String
+  payload        Json?
+  createdAt      DateTime @default(now())
+  report         Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId, version])
+  @@map("report_snapshots")
+}
+
+model Payment {
+  id          String        @id @default(cuid())
+  userId      String
+  amount      Decimal       @db.Decimal(10, 2)
+  currency    String        @default("RUB")
+  yookassaId  String?       @unique
+  paymentUrl  String?
+  status      PaymentStatus @default(PENDING)
+  metadata    Json?
+  description String?
+  paidAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  planType    PlanType?
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  userId         String?
+  action         String
+  resourceType   String?
+  resourceId     String?
+  resource       String?
+  details        Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime      @default(now())
+  metadata       Json?
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([resourceType])
+  @@index([userId])
+  @@map("audit_logs")
+}
+
+model SystemSettings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       Json
+  description String?
+  category    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model AdminUser {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  role         AdminRole  @default(SUPPORT_ADMIN)
+  isActive     Boolean    @default(true)
+  totpSecret   String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  sessions     AdminSession[]
+  permissions  AdminPermission[]
+  webAuthnCredentials AdminWebAuthnCredential[]
+  recoveryCodes       AdminRecoveryCode[]
+  securityIncidents   AdminSecurityIncident[]
+
+  @@map("admin_users")
+  @@index([role])
+  @@index([isActive])
+}
+
+model AdminSession {
+  id         String   @id @default(cuid())
+  adminId    String
+  tokenJti   String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_sessions")
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model AdminPermission {
+  id        String    @id @default(cuid())
+  adminId   String
+  resource  String
+  action    String
+  createdAt DateTime  @default(now())
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("admin_permissions")
+  @@index([adminId])
+  @@index([resource, action])
+}
+
+/// WebAuthn Passkeys для администраторов
+model AdminWebAuthnCredential {
+  id           String   @id @default(cuid())
+  adminId      String
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      BigInt   @default(0)
+  transports   String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  admin        AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([credentialId])
+  @@map("admin_webauthn_credentials")
+}
+
+/// Резервные коды восстановления для администраторов
+model AdminRecoveryCode {
+  id        String   @id @default(cuid())
+  adminId   String
+  codeHash  String
+  used      Boolean  @default(false)
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId, used])
+  @@map("admin_recovery_codes")
+}
+
+/// Журнал инцидентов безопасности в админке
+model AdminSecurityIncident {
+  id          String   @id @default(cuid())
+  adminId     String?
+  type        String   // rate_limit|anomaly|revoke|step_up_required|mfa_failure
+  severity    String   @default("INFO") // INFO|WARN|ERROR
+  message     String
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  admin       AdminUser? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([createdAt])
+  @@index([adminId])
+  @@map("admin_security_incidents")
+}
+
+model RateLimit {
+  id             String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  organizationId String
+  requestCount   Int      @default(0)
+  windowStart    DateTime @default(now()) @db.Timestamp(6)
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@unique([organizationId, windowStart])
+  @@index([organizationId])
+  @@index([windowStart])
+  @@map("rate_limits")
+}
+
+model MonetizationSettings {
+  id                  String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  organizationId      String   @unique
+  surgePricingEnabled Boolean  @default(true)
+  surgeMultiplier     Float    @default(2.0)
+  creditCostPerTon    Float    @default(5.0)
+  cbamAddonCostPerTon Float    @default(3.0)
+  rateLimit           Int      @default(10)
+  rateLimitWindowSec  Int      @default(90)
+  createdAt           DateTime @default(now()) @db.Timestamp(6)
+  updatedAt           DateTime @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@index([organizationId])
+  @@map("monetization_settings")
+}
+
+model QueueJob {
+  id           String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  name         String
+  data         Json?
+  priority     Int           @default(0)
+  state        QueueJobState @default(CREATED)
+  retryLimit   Int           @default(3)
+  retryCount   Int           @default(0)
+  retryDelay   Int           @default(0)
+  retryBackoff Boolean       @default(false)
+  startAfter   DateTime      @default(now()) @db.Timestamp(6)
+  startedOn    DateTime?     @db.Timestamp(6)
+  singletonKey String?
+  singletonOn  DateTime?     @db.Timestamp(6)
+  expireIn     String?
+  createdOn    DateTime      @default(now()) @db.Timestamp(6)
+  completedOn  DateTime?     @db.Timestamp(6)
+  keepUntil    DateTime?     @db.Timestamp(6)
+  output       Json?
+  deadLetter   String?
+  policy       String?
+  logs         QueueJobLog[]
+
+  @@index([name])
+  @@index([state])
+  @@index([priority])
+  @@index([name, state])
+  @@index([startAfter])
+  @@index([createdOn])
+  @@index([completedOn])
+  @@index([singletonKey])
+  @@index([keepUntil])
+  @@map("queue_jobs")
+}
+
+model QueueJobLog {
+  id        String        @id @default(dbgenerated("(gen_random_uuid())::text"))
+  jobId     String
+  level     QueueLogLevel @default(INFO)
+  message   String
+  data      Json?
+  createdOn DateTime      @default(now()) @db.Timestamp(6)
+  job       QueueJob      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([level])
+  @@index([createdOn])
+  @@map("queue_job_logs")
+}
+
+model QueueMetric {
+  id          String   @id @default(dbgenerated("(gen_random_uuid())::text"))
+  metadata    Json?
+  timestamp   DateTime @default(now()) @db.Timestamp(6)
+  expiresAt   DateTime @map("expires_at") @db.Timestamp(6)
+  metricType  String   @map("metric_type")
+  metricValue Float    @map("metric_value")
+
+  @@index([metricType])
+  @@index([timestamp])
+  @@index([expiresAt])
+  @@index([metricType, timestamp])
+  @@map("queue_metrics")
+}
+
+// удалены модели credit_transactions, credits
+
+model Organization {
+  id          String     @id @default(cuid())
+  userId      String     @unique
+  name        String
+  inn         String?    @unique
+  address     String?
+  phone       String?
+  email       String?
+  isBlocked   Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  auditLogs   AuditLog[]
+  
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  profile     OrganizationProfile?
+  users       OrganizationUser[]
+  invitations OrganizationInvitation[]
+  activeUsers User[]     @relation("UserActiveOrganization")
+
+  @@map("organizations")
+}
+
+enum OrganizationProfileStatus {
+  DRAFT
+  VERIFIED
+}
+
+enum OrganizationRoleEnum {
+  OWNER
+  ACCOUNTANT
+  ECOLOGIST
+  VIEWER
+}
+
+model OrganizationProfile {
+  id                 String                     @id @default(cuid())
+  organizationId     String                     @unique
+  fullName           String?
+  shortName          String?
+  inn                String                     @unique
+  kpp                String?
+  ogrn               String?
+  legalAddress       String?
+  bankAccount        String?
+  bankBic            String?
+  bankName           String?
+  emailForBilling    String?
+  phone              String?
+  tochkaAccountId    String?
+  tochkaCustomerCode String?
+  defaultReportFormat String?
+  status             OrganizationProfileStatus  @default(DRAFT)
+  checkoData         Json?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([inn])
+  @@map("organization_profiles")
+}
+
+model OrganizationUser {
+  id             String               @id @default(cuid())
+  organizationId String
+  userId         String
+  role           OrganizationRoleEnum @default(VIEWER)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("organization_users")
+}
+
+model OrganizationInvitation {
+  id             String               @id @default(cuid())
+  organizationId String
+  email          String
+  token          String               @unique
+  role           OrganizationRoleEnum @default(VIEWER)
+  status         String               @default("PENDING")
+  createdAt      DateTime             @default(now())
+  expiresAt      DateTime?
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, email])
+  @@map("organization_invitations")
+}
+
+// удалены organization_credits и organization_credit_transactions
+
+model organization_subscriptions {
+  id               String             @id @default(dbgenerated("(gen_random_uuid())::text"))
+  organizationId   String             @unique
+  plan_type        SubscriptionPlan   @default(FREE)
+  status           SubscriptionStatus @default(INACTIVE)
+  starts_at        DateTime?          @db.Timestamp(6)
+  expires_at       DateTime?          @db.Timestamp(6)
+  auto_renew       Boolean            @default(false)
+  price_rub        Decimal?           @db.Decimal(10, 2)
+  features         Json?
+  createdAt        DateTime           @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @db.Timestamp(6)
+  annual_emissions Int?               @default(0)
+  has_cbam_addon   Boolean            @default(false)
+
+  @@index([organizationId], map: "org_subscriptions_organizationId_idx")
+  @@index([plan_type], map: "org_subscriptions_plan_type_idx")
+  @@index([status], map: "org_subscriptions_status_idx")
+  @@index([expires_at], map: "org_subscriptions_expires_at_idx")
+}
+
+model EmissionFactor {
+  id            String    @id @default(dbgenerated("(gen_random_uuid())::text"))
+  version       String    @unique
+  name          String
+  description   String
+  effectiveFrom DateTime  @db.Timestamp(6)
+  effectiveTo   DateTime? @db.Timestamp(6)
+  isActive      Boolean   @default(true)
+  source        String
+  coefficients  Json
+  createdAt     DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @db.Timestamp(6)
+
+  @@index([effectiveFrom])
+  @@index([effectiveTo])
+  @@index([isActive])
+  @@index([version])
+  @@map("emission_factors")
+}
+
+model ReportValidation {
+  id             String         @id @default(cuid())
+  reportId       String
+  validationType ValidationType
+  isValid        Boolean
+  errors         String[]
+  warnings       String[]
+  schemaType     String?
+  validationData Json?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  report         Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("report_validations")
+}
+
+model TemplateCustomization {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  templateType String
+  fields       Json
+  header       Json
+  footer       Json
+  branding     Json
+  logo         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("template_customizations")
+}
+
+model BankInvoice {
+  id                 String        @id @default(cuid())
+  organizationId     String
+  invoiceNumber      String        @unique
+  bankInvoiceId      String        @unique
+  customerCode       String?       // Bank Tochka customerCode (sandbox/production)
+  invoiceType        InvoiceType
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("RUB")
+  status             InvoiceStatus @default(PENDING)
+  customerName       String
+  customerInn        String
+  customerAddress    String?
+  customerPhone      String?
+  customerEmail      String?
+  paymentUrl         String?
+  qrCodeUrl          String?
+  pdfUrl             String?
+  description        String
+  estimatedEmissions Decimal?      @db.Decimal(12, 3)
+  excessEmissions    Decimal?      @db.Decimal(12, 3)
+  ratePerTon         Decimal?      @db.Decimal(8, 2)
+  expirationDate     DateTime?
+  paidAt             DateTime?
+  errorMessage       String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  planType           PlanType?
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([invoiceType])
+  @@index([createdAt])
+  @@map("bank_invoices")
+}
+
+model EmissionOveragePayment {
+  id              String        @id @default(cuid())
+  organizationId  String
+  reportId        String
+  bankInvoiceId   String
+  excessEmissions Decimal       @db.Decimal(12, 3)
+  ratePerTon      Decimal       @db.Decimal(8, 2)
+  totalAmount     Decimal       @db.Decimal(12, 2)
+  status          PaymentStatus @default(PENDING)
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@index([reportId])
+  @@index([status])
+  @@map("emission_overage_payments")
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+  ARCHIVED
+  QUEUED
+  QUARANTINE
+}
+
+enum ReportType {
+  REPORT_296FZ
+  CBAM_XML
+  CBAM_CSV
+  CARBON_FOOTPRINT
+}
+
+enum PlanType {
+  TRIAL
+  LITE
+  STANDARD
+  LARGE
+  ENTERPRISE
+  CBAM
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+// удалён enum CreditTransactionType
+
+enum SubscriptionPlan {
+  FREE
+  TRIAL
+  LITE
+  STANDARD
+  LARGE
+  CBAM_ADDON
+}
+
+enum SubscriptionStatus {
+  INACTIVE
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  PENDING
+}
+
+// Auth.js совместимые таблицы
+model Account {
+  id                 String   @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?
+  access_token       String?
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?
+  session_state      String?
+  password           String?  // Хешированный пароль для credentials провайдера
+  
+  // WebAuthn/Passkey поля для биометрической авторизации
+  credentialID       String?  // Unique identifier for the credential
+  credentialPublicKey Bytes?  // Public key for verification
+  counter            Int?     // Signature counter for replay protection
+  credentialDeviceType String? // "platform" or "cross-platform"
+  credentialBackedUp Boolean? // Whether the credential is backed up
+  transports         String[] @default([]) // Transport methods (e.g., ["internal", "hybrid"])
+  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@index([credentialID])
+  @@map("accounts")
+}
+
+model Session {
+  id            String   @id @default(cuid())
+  sessionToken  String   @unique
+  userId        String
+  expires       DateTime
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expires])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model OtpCode {
+  id         String   @id @default(cuid())
+  contact    String
+  codeHash   String
+  purpose    String?
+  attempts   Int      @default(0)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([contact])
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+model BackupCode {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, used])
+  @@map("backup_codes")
+}
+
+enum QueueStatus {
+  WAITING
+  ACTIVE
+  COMPLETED
+  FAILED
+  DELAYED
+  STALLED
+}
+
+enum QueueJobState {
+  CREATED
+  RETRY
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  CANCELLED
+  FAILED
+}
+
+enum QueueLogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+enum ValidationType {
+  CBAM_XML
+  EMISSION_296FZ
+  STRUCTURE_CHECK
+  DATA_QUALITY
+}
+
+enum InvoiceType {
+  PLAN_PURCHASE
+  OVERAGE_PAYMENT
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+/// События для простого rate limiting по ключу (IP+идентификатор)
+model RateLimitEvent {
+  id        String   @id @default(cuid())
+  key       String
+  createdAt DateTime @default(now())
+
+  @@index([key, createdAt])
+  @@map("rate_limit_events")
+}
+
+/// Попытки аутентификации для анти-brute force системы
+model SecurityAttempt {
+  id         String   @id @default(cuid())
+  ip         String
+  identifier String?  // email, phone, username
+  endpoint   String   @default("auth")
+  success    Boolean  @default(false)
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  @@index([ip, endpoint, success, timestamp])
+  @@index([identifier, endpoint, success, timestamp])
+  @@map("security_attempts")
+}
+
+/// Активные блокировки IP/пользователей
+model SecurityBlock {
+  id         String   @id @default(cuid())
+  ip         String
+  identifier String?  // email, phone, username
+  endpoint   String   @default("auth")
+  attempts   Int      @default(0)
+  reason     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([ip, expiresAt])
+  @@index([identifier, expiresAt])
+  @@map("security_blocks")
+}
+
+/// Аудит логи для 152-ФЗ соответствия
+model SecurityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  ip        String
+  event     String   // login_attempt, login_success, login_failed, blocked, captcha_required
+  details   Json     // дополнительная информация о событии
+  timestamp DateTime @default(now())
+
+  @@index([userId, timestamp])
+  @@index([ip, event, timestamp])
+  @@map("security_logs")
+}
+
+/// WebAuthn challenges (замена Redis)
+model WebAuthnChallenge {
+  id        String   @id @default(cuid())
+  email     String
+  challenge String
+  type      String   // 'register' или 'authenticate'
+  data      Json     // дополнительные данные
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([email, type])
+  @@index([expiresAt])
+  @@map("webauthn_challenges")
+}
+
+/// GigaChat токены (кэш в PostgreSQL вместо Redis)
+model GigaChatToken {
+  id        String   @id @default(cuid())
+  clientId  String   @unique
+  token     String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([expiresAt])
+  @@map("gigachat_tokens")
+}
+
+/// Уведомления для пользователей и администраторов
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // document_data_edited, document_correction_submitted, document_failed_processing, system_error, user_feedback
+  title     String
+  message   String
+  metadata  Json?    // дополнительные данные (documentId, changes, triggeredBy, priority, etc.)
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, read])
+  @@index([type])
+  @@index([createdAt])
+  @@map("notifications")
+}
