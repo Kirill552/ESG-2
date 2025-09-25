@@ -6,7 +6,7 @@ export function useTheme() {
   const [theme, setTheme] = useState<Theme>('system');
 
   useEffect(() => {
-    const stored = localStorage.getItem('ecoreport-theme') as Theme;
+  const stored = localStorage.getItem('esg-lite-theme') as Theme;
     if (stored) {
       setTheme(stored);
     }
@@ -22,7 +22,7 @@ export function useTheme() {
       root.className = theme;
     }
     
-    localStorage.setItem('ecoreport-theme', theme);
+  localStorage.setItem('esg-lite-theme', theme);
   }, [theme]);
 
   const toggleTheme = () => {

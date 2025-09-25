@@ -1,7 +1,7 @@
 {
-  "name": "esg-2-backend",
+  "name": "esg-lite-backend",
   "version": "1.0.0",
-  "description": "ESG-2 Backend - Российская B2B SaaS платформа для автоматизации углеродной отчетности",
+  "description": "ESG-лайт Backend - Российская B2B SaaS платформа для автоматизации углеродной отчетности",
   "keywords": [
     "esg",
     "carbon",
@@ -54,7 +54,7 @@
     "npm": ">=9.0.0"
   },
   "author": {
-    "name": "ESG-2 Team",
+    "name": "ESG-Лайт Team",
     "email": "team@esg2.ru"
   },
   "license": "UNLICENSED"

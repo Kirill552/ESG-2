@@ -169,7 +169,7 @@ export function Pricing({ onNavigate, onLogout }: PricingProps) {
             className="text-center mb-10"
           >
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
-              Получите доступ к EcoReport
+              Получите доступ к ESG-Лайт
             </h2>
             <p className="text-lg text-[#58625d] mb-6 max-w-2xl mx-auto">
               Доступ к платформе предоставляется после рассмотрения заявки. 
@@ -284,7 +284,7 @@ export function Pricing({ onNavigate, onLogout }: PricingProps) {
               <div className="flex flex-wrap justify-center gap-8">
                 <div className="flex items-center gap-3 px-6 py-3 bg-white/60 backdrop-blur-xl rounded-full border border-white/60">
                   <Mail className="w-6 h-6 text-emerald-600" />
-                  <span className="font-bold text-slate-700">support@ecoreport.ru</span>
+                  <span className="font-bold text-slate-700">support@esg-lite.ru</span>
                 </div>
                 <div className="flex items-center gap-3 px-6 py-3 bg-white/60 backdrop-blur-xl rounded-full border border-white/60">
                   <Phone className="w-6 h-6 text-emerald-600" />
@@ -317,7 +317,7 @@ export function Pricing({ onNavigate, onLogout }: PricingProps) {
                 <CardHeader className="border-b border-white/40 bg-gradient-to-r from-white/80 via-emerald-50/60 to-white/80 backdrop-blur-xl">
                   <CardTitle className="text-3xl font-black text-slate-800">Заявка на доступ</CardTitle>
                   <CardDescription className="text-xl font-medium text-slate-600">
-                    Заполните форму для получения доступа к платформе EcoReport
+                    Заполните форму для получения доступа к платформе ESG-Лайт
                   </CardDescription>
                 </CardHeader>
                 

@@ -469,7 +469,7 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                   <CardHeader>
                     <CardTitle>Экспорт данных</CardTitle>
                     <CardDescription>
-                      Ска��айте копию ваших данных
+                      Скачайте копию ваших данных
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
