@@ -1,6 +1,6 @@
 /**
  * Паттерны распознавания российских документов для отчетности 2025
- * Покрывает все типы документов для 296-ФЗ, CBAM, углеродного следа
+ * Сфокусировано на требованиях 296-ФЗ и связанных локальных процессов
  */
 
 export interface DocumentPattern {
@@ -113,7 +113,7 @@ export const RUSSIAN_DOCUMENT_PATTERNS: DocumentPattern[] = [
     name: 'Счет-фактура на материалы',
     patterns: ['счет-фактура', 'материалы', 'сырье', 'комплектующие', 'поставка'],
     required_fields: ['material_type', 'quantity', 'unit_of_measure', 'supplier_info'],
-    optional_fields: ['carbon_footprint', 'origin_country', 'transport_method'],
+  optional_fields: ['origin_country', 'transport_method'],
     emission_relevance: 'medium',
     description: 'Закупки сырья и материалов (scope 3)'
   },
@@ -281,10 +281,10 @@ export const RUSSIAN_DOCUMENT_PATTERNS: DocumentPattern[] = [
     type: 'customs_declaration',
     name: 'Таможенная декларация',
     patterns: ['таможенная декларация', 'гтд', 'экспорт', 'импорт', 'страна происхождения', 'тн вэд'],
-    required_fields: ['product_type', 'country_of_origin', 'net_weight', 'transport_method', 'distance_km'],
-    optional_fields: ['carbon_intensity', 'production_method', 'cbam_certificate'],
-    emission_relevance: 'medium',
-    description: 'Таможенные документы для CBAM и Scope 3'
+  required_fields: ['product_type', 'country_of_origin', 'net_weight', 'transport_method', 'distance_km'],
+  optional_fields: ['production_method'],
+  emission_relevance: 'medium',
+  description: 'Таможенные документы для учета транспортных выбросов'
   },
   {
     type: 'business_trip_report',
@@ -295,16 +295,6 @@ export const RUSSIAN_DOCUMENT_PATTERNS: DocumentPattern[] = [
     emission_relevance: 'medium',
     description: 'Командировки и служебные поездки (Scope 3)'
   },
-  {
-    type: 'supplier_questionnaire',
-    name: 'Анкета поставщика',
-    patterns: ['анкета поставщика', 'esg отчетность', 'углеродный след продукции', 'возобновляемая энергия'],
-    required_fields: ['supplier_name', 'product_carbon_footprint', 'renewable_energy_share', 'certification_type'],
-    optional_fields: ['scope1_emissions', 'scope2_emissions', 'scope3_emissions', 'reduction_targets'],
-    emission_relevance: 'medium',
-    description: 'Информация о выбросах от поставщиков (Scope 3)'
-  },
-
   // МОНИТОРИНГ И ОЧИСТКА
   {
     type: 'emission_monitoring',
@@ -315,16 +305,6 @@ export const RUSSIAN_DOCUMENT_PATTERNS: DocumentPattern[] = [
     emission_relevance: 'high',
     description: 'Прямые измерения выбросов на предприятии'
   },
-  {
-    type: 'carbon_offset_certificate',
-    name: 'Сертификат углеродных кредитов',
-    patterns: ['углеродные кредиты', 'климатические проекты', 'офсет', 'компенсация выбросов', 'vcs', 'gold standard'],
-    required_fields: ['project_type', 'credits_amount_tco2', 'vintage_year', 'registry'],
-    optional_fields: ['project_location', 'verification_body', 'retirement_date', 'serial_numbers'],
-    emission_relevance: 'medium',
-    description: 'Компенсация выбросов через климатические проекты'
-  },
-
   // ДОПОЛНИТЕЛЬНЫЕ КРИТИЧЕСКИ ВАЖНЫЕ РОССИЙСКИЕ ДОКУМЕНТЫ
   {
     type: 'rosstat_report_2tp',
@@ -390,15 +370,6 @@ export const RUSSIAN_DOCUMENT_PATTERNS: DocumentPattern[] = [
     description: 'Разрешения на комплексное воздействие на окружающую среду'
   },
   {
-    type: 'carbon_footprint_declaration',
-    name: 'Декларация о углеродном следе продукции',
-    patterns: ['углеродный след продукции', 'жизненный цикл', 'lca', 'декларация углеродного следа', 'carbon footprint'],
-    required_fields: ['product_name', 'functional_unit', 'system_boundaries', 'total_carbon_footprint'],
-    optional_fields: ['upstream_emissions', 'manufacturing_emissions', 'transport_emissions', 'end_of_life_emissions'],
-    emission_relevance: 'high',
-    description: 'Декларации углеродного следа для продукции и услуг'
-  },
-  {
     type: 'renewable_energy_certificate',
     name: 'Сертификат возобновляемой энергии',
     patterns: ['возобновляемая энергия', 'зеленые сертификаты', 'виэ', 'солнечная энергия', 'ветровая энергия', 'биоэнергетика'],
@@ -406,24 +377,6 @@ export const RUSSIAN_DOCUMENT_PATTERNS: DocumentPattern[] = [
     optional_fields: ['commissioning_date', 'technology_type', 'grid_connection', 'support_scheme'],
     emission_relevance: 'high',
     description: 'Документы по возобновляемым источникам энергии'
-  },
-  {
-    type: 'forest_management_plan',
-    name: 'План управления лесами / Лесоустройство',
-    patterns: ['план управления лесами', 'лесоустройство', 'лесопользование', 'лесовосстановление', 'углерододепонирование'],
-    required_fields: ['forest_area_ha', 'tree_species', 'carbon_stock_estimate', 'management_activities'],
-    optional_fields: ['biodiversity_measures', 'harvesting_plan', 'certification_status', 'monitoring_protocol'],
-    emission_relevance: 'medium',
-    description: 'Планы лесоуправления для углеродных проектов'
-  },
-  {
-    type: 'soil_carbon_survey',
-    name: 'Обследование углерода в почвах',
-    patterns: ['углерод в почвах', 'почвенный углерод', 'секвестрация углерода', 'агроуглеродные проекты', 'no-till'],
-    required_fields: ['soil_type', 'carbon_content_percent', 'sampling_depth', 'land_use_type'],
-    optional_fields: ['management_practices', 'baseline_year', 'sampling_methodology', 'verification_body'],
-    emission_relevance: 'medium',
-    description: 'Исследования почвенного углерода для климатических проектов'
   },
 
   // СЕЛЬСКОХОЗЯЙСТВЕННЫЕ ИСТОЧНИКИ ВЫБРОСОВ (критично для N2O и CH4)
@@ -666,13 +619,6 @@ export const UNIVERSAL_EXTRACTION_FIELDS = [
   'co2_equivalent_kg',
   'emission_factor',
   'activity_data',
-  
-  // CBAM-релевантные поля
-  'cbam_sector',
-  'carbon_content_product',
-  'emission_intensity',
-  'free_allocation',
-  'carbon_price_paid',
   
   // Новые экологичные технологии
   'renewable_energy_share',
@@ -1327,36 +1273,6 @@ export const INDUSTRIAL_EXTRACTION_PATTERNS: ExtractionPattern[] = [
     units: ['т', 'шт', 'м³'],
     expectedAccuracy: 85,
     description: 'Производственные отчеты и процессы'
-  },
-  
-  // CBAM ПРИОРИТЕТ: Азотная кислота (ВЫСОКИЙ приоритет)
-  {
-    category: 'industrial',
-    subcategory: 'cbam_nitric_acid',
-    patterns: [
-      /(?:производство|изготовление|выпуск)\s*азотной?\s*кислот[ыа][\s:]*(\d+(?:[.,]\d+)?)\s*(м³|л|т|кг)/gi,
-      /азотн[а-я]*\s*кислот[а-я]*[\s:]*(\d+(?:[.,]\d+)?)\s*(м³|л|т|кг)/gi,
-      /HNO3[\s:]*(\d+(?:[.,]\d+)?)\s*(м³|л|т|кг)/gi
-    ],
-    units: ['м³', 'л', 'т', 'кг'],
-    expectedAccuracy: 95,
-    description: 'Азотная кислота - товар CBAM, коэффициент 2170 кг CO₂/т'
-  },
-  
-  // CBAM ПРИОРИТЕТ: Металлоизделия (СРЕДНИЙ приоритет)
-  {
-    category: 'industrial', 
-    subcategory: 'cbam_steel_products',
-    patterns: [
-      /металлоизделия[\s:]*(\d+(?:[.,]\d+)?)\s*(?:т|ц|кг)/gi,
-      /металлопродукц[а-я]*[\s:]*(\d+(?:[.,]\d+)?)\s*(?:т|ц|кг)/gi,
-      /стальн[а-я]*\s*издел[а-я]*[\s:]*(\d+(?:[.,]\d+)?)\s*(?:т|ц|кг)/gi,
-      /металлическ[а-я]*\s*констр[а-я]*[\s:]*(\d+(?:[.,]\d+)?)\s*(?:т|ц|кг)/gi,
-      /черн[а-я]*\s*металл[а-я]*[\s:]*(\d+(?:[.,]\d+)?)\s*(?:т|ц|кг)/gi
-    ],
-    units: ['т', 'ц', 'кг'],
-    expectedAccuracy: 90,
-    description: 'Металлоизделия - потенциально CBAM при экспорте, коэффициент 1850 кг CO₂/т'
   },
   
   // УГЛЕРОДНЫЙ СЛЕД: Строительные материалы (НИЗКИЙ приоритет)

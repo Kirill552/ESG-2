@@ -1,11 +1,38 @@
 // Centralized NextAuth options (no NextAuth call here!)
 // Tests can import/mock from '@/lib/auth-options' safely without executing route handler code.
+import type { AuthOptions, User } from "next-auth";
+import type { OAuthConfig } from "next-auth/providers";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import prisma from "@/lib/prisma";
 
-// VK ID Provider
+type OpenIDProfile = {
+	sub?: string;
+	id?: string;
+	email?: string;
+	given_name?: string;
+	family_name?: string;
+	name?: string;
+	phone_number?: string;
+};
+
+const buildDisplayName = (profile: OpenIDProfile) => {
+	const parts = [profile?.given_name, profile?.family_name].filter(Boolean) as string[];
+	if (parts.length) {
+		return parts.join(" ");
+	}
+	return profile?.name ?? null;
+};
+
+const toIsoString = (value?: string | Date | null) => {
+	if (!value) return undefined;
+	if (typeof value === "string") return value;
+	return value.toISOString();
+};
+
+type OIDCProviderConfig = OAuthConfig<OpenIDProfile> & { idToken?: boolean };
+
 const VKIDProvider = {
 	id: "vkid",
 	name: "VK ID",
@@ -16,16 +43,16 @@ const VKIDProvider = {
 	clientId: process.env.VKID_CLIENT_ID || process.env.NEXT_PUBLIC_VKID_APP_ID,
 	clientSecret: process.env.VKID_CLIENT_SECRET || "unused",
 	idToken: true,
-	profile(profile: any) {
+	profile(profile) {
 		return {
-			id: String(profile?.sub || profile?.id || ""),
-			email: profile?.email || null,
-			name: [profile?.given_name, profile?.family_name].filter(Boolean).join(" ") || profile?.name || null,
-		} as any;
+			id: String(profile?.sub ?? profile?.id ?? ""),
+			email: profile?.email ?? null,
+			name: buildDisplayName(profile),
+			phone: profile?.phone_number ?? null,
+		};
 	},
-} as any;
+} satisfies OIDCProviderConfig;
 
-// SberID Provider
 const SberIDProvider = {
 	id: "sberid",
 	name: "Сбер ID",
@@ -36,189 +63,197 @@ const SberIDProvider = {
 	clientId: process.env.SBERID_CLIENT_ID,
 	clientSecret: process.env.SBERID_CLIENT_SECRET,
 	idToken: true,
-	profile(profile: any) {
+	profile(profile) {
 		return {
-			id: String(profile?.sub || profile?.id || ""),
-			email: profile?.email || null,
-			name: profile?.name || [profile?.given_name, profile?.family_name].filter(Boolean).join(" ") || null,
-			phone: profile?.phone_number || null,
-		} as any;
+			id: String(profile?.sub ?? profile?.id ?? ""),
+			email: profile?.email ?? null,
+			name: buildDisplayName(profile),
+			phone: profile?.phone_number ?? null,
+		};
 	},
-} as any;
+} satisfies OIDCProviderConfig;
 
-export const authOptions = {
-	adapter: PrismaAdapter(prisma as any),
+const isProduction = process.env.NODE_ENV === "production";
+
+const oauthProviders: AuthOptions["providers"] = [];
+
+if (VKIDProvider.clientId) {
+	oauthProviders.push(VKIDProvider);
+}
+
+if (SberIDProvider.clientId && SberIDProvider.clientSecret) {
+	oauthProviders.push(SberIDProvider);
+}
+
+export const authOptions: AuthOptions = {
+	adapter: PrismaAdapter(prisma),
 	providers: [
 		CredentialsProvider({
 			id: "credentials",
 			name: "Пароль",
 			credentials: {
 				email: { label: "Email", type: "email" },
-				password: { label: "Пароль", type: "password" }
+				password: { label: "Пароль", type: "password" },
 			},
 			async authorize(credentials) {
 				if (!credentials?.email || !credentials?.password) {
-					console.log('[DEBUG] Missing credentials');
 					return null;
 				}
 
 				try {
-					console.log('[DEBUG] Credentials provider - email:', credentials.email);
-					console.log('[DEBUG] Credentials provider - password length:', credentials.password.length);
-          
-					const user = await (prisma as any).user.findUnique({
+					const user = await prisma.user.findUnique({
 						where: { email: credentials.email },
-						select: { 
-							id: true, 
-							email: true, 
-							name: true, 
-							hashedPassword: true 
-						}
+						select: {
+							id: true,
+							email: true,
+							name: true,
+							hashedPassword: true,
+							lastLoginAt: true,
+							isBlocked: true,
+						},
 					});
 
-					if (!user) {
-						console.log('[DEBUG] User not found');
+					if (!user?.hashedPassword) {
 						return null;
 					}
 
-					if (!user.hashedPassword) {
-						console.log('[DEBUG] User has no password');
+					if (user.isBlocked) {
 						return null;
 					}
-
-					console.log('[DEBUG] User found:', user.email);
-					console.log('[DEBUG] Stored hash starts with:', user.hashedPassword.substring(0, 10));
 
 					const isPasswordValid = await bcrypt.compare(credentials.password, user.hashedPassword);
-          
-					console.log('[DEBUG] Password comparison result:', isPasswordValid);
-          
+
 					if (!isPasswordValid) {
-						console.log('[DEBUG] Invalid password');
 						return null;
 					}
 
-					console.log('[DEBUG] Password login successful for:', user.email);
-					return {
+					const result: User & { lastLoginAt?: string } = {
 						id: user.id,
 						email: user.email,
-						name: user.name,
+						name: user.name ?? undefined,
+						lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString() : undefined,
 					};
+
+					return result;
 				} catch (error) {
-					console.error('[DEBUG] Error in credentials provider:', error);
+					console.error("[AUTH] Error in credentials provider", error);
 					return null;
 				}
-			}
+			},
 		}),
-		VKIDProvider,
-		SberIDProvider,
+		...oauthProviders,
 	],
-	session: { 
-		strategy: "database" as const,
+	session: {
+		strategy: "database",
 		maxAge: 30 * 24 * 60 * 60,
 		updateAge: 24 * 60 * 60,
 	},
 	cookies: {
 		sessionToken: {
-			name: process.env.NODE_ENV === 'production' 
-				? "__Secure-next-auth.session-token" 
-				: "next-auth.session-token",
+			name: isProduction ? "__Secure-next-auth.session-token" : "next-auth.session-token",
 			options: {
 				httpOnly: true,
 				sameSite: "lax",
 				path: "/",
-				secure: process.env.NODE_ENV === 'production',
+				secure: isProduction,
 				maxAge: 30 * 24 * 60 * 60,
-			}
-		}
+			},
+		},
 	},
 	secret: process.env.AUTH_SECRET,
 	pages: {
-		signIn: '/sign-in',
-		error: '/sign-in',
+		signIn: "/sign-in",
+		error: "/sign-in",
 	},
 	callbacks: {
-		async jwt({ token, user, account }: any) {
+		async jwt({ token, user }) {
 			if (user) {
 				token.id = user.id;
 				token.email = user.email;
 				token.name = user.name;
+				const lastLoginAt = toIsoString((user as any)?.lastLoginAt ?? null);
+				if (lastLoginAt) {
+					token.lastLoginAt = lastLoginAt;
+				} else if (!token.lastLoginAt) {
+					token.lastLoginAt = new Date().toISOString();
+				}
 			}
 			return token;
 		},
-		async session({ session, token, user }: any) {
+		async session({ session, token, user }) {
 			try {
 				if (session?.user) {
-					if (user?.id) {
-						(session as any).userId = user.id;
-						(session.user as any).id = user.id;
-					} else if (token?.id) {
-						(session as any).userId = token.id;
-						(session.user as any).id = token.id;
-					} else if (session.user.email) {
-						const dbUser = await (prisma as any).user.findUnique({
-							where: { email: session.user.email },
-							select: { id: true }
-						});
-						if (dbUser?.id) {
-							(session as any).userId = dbUser.id;
-							(session.user as any).id = dbUser.id;
-						}
+					const resolvedId = (user as any)?.id ?? (token?.id as string | undefined);
+					if (resolvedId) {
+						(session.user as any).id = resolvedId;
+						(session as any).userId = resolvedId;
 					}
-					if (typeof session.user.email === 'undefined' && token?.email) {
-						session.user.email = token.email;
+					if (!session.user.email && token?.email) {
+						session.user.email = token.email as string;
 					}
-					if (typeof session.user.name === 'undefined' && token?.name) {
-						session.user.name = token.name;
+					if (!session.user.name && token?.name) {
+						session.user.name = token.name as string;
+					}
+					const lastLoginAt = toIsoString((user as any)?.lastLoginAt ?? (token as any)?.lastLoginAt ?? null);
+					if (lastLoginAt) {
+						(session.user as any).lastLoginAt = lastLoginAt;
 					}
 				}
-			} catch (e) {
-				// swallow
+			} catch (error) {
+				console.error("[AUTH] Session callback error", error);
 			}
 			return session;
 		},
-		async signIn({ user, account }: any) {
-			console.log('[DEBUG] signIn callback called with:', { 
-				user: user ? { id: user.id, email: user.email } : null, 
-				account: account ? { provider: account.provider, type: account.type } : null 
-			});
-      
-			if (account?.provider === 'credentials' && user) {
-				try {
-					const existingUser = await (prisma as any).user.findUnique({
-						where: { id: user.id }
-					});
-					console.log('[DEBUG] Existing user found:', !!existingUser);
-					return !!existingUser;
-				} catch (error) {
-					console.error('[DEBUG] Error checking user in signIn:', error);
+		async signIn({ user, account }) {
+			if (!user) {
+				return false;
+			}
+
+			try {
+				const existingUser = await prisma.user.findUnique({
+					where: { id: user.id },
+					select: { id: true, isBlocked: true },
+				});
+
+				if (!existingUser || existingUser.isBlocked) {
 					return false;
 				}
+
+				const now = new Date();
+				await prisma.user.update({
+					where: { id: user.id },
+					data: { lastLoginAt: now },
+				});
+
+				(user as any).lastLoginAt = now.toISOString();
+			} catch (error) {
+				console.error("[AUTH] signIn callback error", error);
+				return false;
 			}
-      
+
 			return true;
 		},
-		async redirect({ url, baseUrl }: any) {
-			console.log('[DEBUG] Redirect callback:', { url, baseUrl });
-      
-			if (url === `${baseUrl}/sign-in` || url.includes('/sign-in')) {
-				console.log('[DEBUG] Redirecting credentials login to dashboard');
+		async redirect({ url, baseUrl }) {
+			if (url === `${baseUrl}/sign-in` || url.includes("/sign-in")) {
 				return `${baseUrl}/dashboard`;
 			}
-      
+
 			if (url.startsWith("/")) return `${baseUrl}${url}`;
-			else if (new URL(url).origin === baseUrl) return url;
+			if (new URL(url).origin === baseUrl) return url;
 			return baseUrl;
 		},
 	},
 	events: {
-		async signIn({ user, account }: any) {
-			console.log(`User ${user.email} signed in with ${account?.provider}`);
+		async signIn({ user, account }) {
+			console.info(`User ${user?.email ?? user?.id} signed in with ${account?.provider}`);
 		},
-		async signOut({ session }: any) {
-			console.log(`User signed out`);
-			if (session?.userId) {
-				console.log(`Clearing session for user ${session.userId}`);
+		async signOut({ session }) {
+			const identifier =
+				session?.user?.email ||
+				session?.user?.name ||
+				(session as unknown as { userId?: string })?.userId;
+			if (identifier) {
+				console.info(`Session closed for user ${identifier}`);
 			}
 		},
 	},

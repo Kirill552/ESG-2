@@ -394,15 +394,17 @@ class IntelligentFileProcessor {
       const mammoth = await import('mammoth');
       const result = await mammoth.extractRawText({ buffer: fileBuffer });
       
+      const warnings = result.messages.map((message) => message.message);
+
       return {
         text: result.value,
         confidence: result.value.length > 0 ? 0.9 : 0.1,
         source: 'docx',
         processingTime: 0,
         metadata: {
-          warnings: result.messages.map(m => m.message)
+          warnings
         },
-        warnings: result.messages.map(m => m.message)
+        warnings
       };
     } catch (error) {
       throw new Error(`Word парсер не смог обработать файл: ${error instanceof Error ? error.message : String(error)}`);

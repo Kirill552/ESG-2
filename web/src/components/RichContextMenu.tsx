@@ -12,6 +12,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from './ui/context-menu';
+import { cn } from './ui/utils';
 
 interface MenuItem {
   id: string;
@@ -97,6 +98,10 @@ export function RichContextMenu({
         asChild
       >
         <motion.div
+          className={cn(
+            prefersReducedMotion ? "" : "will-change-transform",
+          )}
+          style={{ marginLeft: '0.75rem', marginTop: '0.5rem' }}
           initial={{ opacity: 0, scale: 0.95, y: -10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: -10 }}
