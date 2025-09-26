@@ -234,13 +234,21 @@ export const authOptions: AuthOptions = {
 			return true;
 		},
 		async redirect({ url, baseUrl }) {
+			const postLoginPath =
+				process.env.POST_LOGIN_PATH ||
+				process.env.MAGIC_LINK_DEFAULT_REDIRECT ||
+				"/?view=dashboard";
+			const normalizedPostLoginPath = postLoginPath.startsWith("/")
+				? postLoginPath
+				: `/${postLoginPath}`;
+
 			if (url === `${baseUrl}/sign-in` || url.includes("/sign-in")) {
-				return `${baseUrl}/dashboard`;
+				return `${baseUrl}${normalizedPostLoginPath}`;
 			}
 
 			if (url.startsWith("/")) return `${baseUrl}${url}`;
 			if (new URL(url).origin === baseUrl) return url;
-			return baseUrl;
+			return `${baseUrl}${normalizedPostLoginPath}`;
 		},
 	},
 	events: {

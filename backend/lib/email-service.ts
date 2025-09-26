@@ -447,7 +447,8 @@ ESG-Lite | Автоматизация углеродной отчетности
       const ok = await sendTransactionalEmail({
         to: recipient.email,
         subject: template.subject || 'ESG‑Lite',
-        html: template.html || template.text || ''
+        html: template.html || template.text || '',
+        text: template.text
       });
       if (ok.status === 'ok') return true;
       if (process.env.NODE_ENV === 'development') {

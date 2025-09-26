@@ -1,10 +1,13 @@
-﻿import React, { useState } from 'react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Separator } from './ui/separator';
-import { ArrowLeft, Mail, Key, Fingerprint } from 'lucide-react';
-import { Badge } from './ui/badge';
+﻿"use client";
+
+import React, { useEffect, useState } from "react";
+import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
+import { ArrowLeft, Fingerprint, Mail } from "lucide-react";
+
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { VKIDWidget } from "./VKIDWidget";
 
 interface AuthFormProps {
   onSuccess: () => void;
@@ -12,43 +15,218 @@ interface AuthFormProps {
 }
 
 export function AuthForm({ onSuccess, onBack }: AuthFormProps) {
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [authMethod, setAuthMethod] = useState<'email' | 'magic' | 'vk' | 'passkey' | null>(null);
-  const [hasPasskey] = useState(true); // Симуляция настроенного пасскея
+  const [authMethod, setAuthMethod] = useState<"email" | "magic" | "vk" | null>(null);
+  const [isPasskeyAvailable, setIsPasskeyAvailable] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const detectPasskeyAvailability = async () => {
+      if (typeof window === "undefined" || typeof window.PublicKeyCredential === "undefined") {
+        if (isMounted) {
+          setIsPasskeyAvailable(false);
+        }
+        return;
+      }
+
+      try {
+        const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable?.();
+        if (isMounted) {
+          setIsPasskeyAvailable(Boolean(available));
+        }
+      } catch (detectError) {
+        console.warn("Passkey availability detection failed", detectError);
+        if (isMounted) {
+          setIsPasskeyAvailable(false);
+        }
+      }
+    };
+
+    detectPasskeyAvailability();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setStatusMessage(null);
+  }, [email]);
 
   const handleMagicLink = async () => {
-    if (!email) return;
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+      setError("Введите корректный email");
+      return;
+    }
     setIsLoading(true);
-    setAuthMethod('magic');
-    
-    // Симуляция отправки волшебной ссылки
-    setTimeout(() => {
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await fetch('/api/auth/magic-link/request', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          redirectTo: '/?view=dashboard'
+        })
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(result?.message || 'Не удалось отправить ссылку. Попробуйте позже.');
+        return;
+      }
+
+      setAuthMethod('magic');
+      setStatusMessage('Ссылка отправлена. Проверьте почтовый ящик.');
+    } catch (err) {
+      console.error('Magic link request failed', err);
+      setError('Не удалось отправить ссылку. Проверьте соединение и попробуйте ещё раз.');
+    } finally {
       setIsLoading(false);
-      onSuccess();
-    }, 2000);
+    }
   };
 
-  const handleVkAuth = () => {
-    setIsLoading(true);
-    setAuthMethod('vk');
-    
-    // Симуляция авторизации через VK ID
-    setTimeout(() => {
-      setIsLoading(false);
-      onSuccess();
-    }, 1500);
+  const handleVkAuthSuccess = (data: any) => {
+    console.log('VK ID авторизация успешна:', data);
+    setIsLoading(false);
+    onSuccess();
   };
 
-  const handlePasskeyAuth = () => {
+  const handleVkAuthError = (error: any) => {
+    console.error('Ошибка VK ID авторизации:', error);
+    setIsLoading(false);
+    // Можно показать уведомление об ошибке
+  };
+
+  const handlePasskeyAuth = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setError("Введите email, чтобы использовать Passkey");
+      return;
+    }
+
+    if (!isPasskeyAvailable) {
+      setError("Ваше устройство не поддерживает вход по Passkey");
+      return;
+    }
+
     setIsLoading(true);
-    setAuthMethod('passkey');
-    
-    // Симуляция авторизации через пасскей
-    setTimeout(() => {
+    setStatusMessage(null);
+    setError(null);
+
+    const deriveDisplayName = () => {
+      const localPart = normalizedEmail.split("@")[0] ?? normalizedEmail;
+  const cleaned = localPart.replace(/[^\p{L}\p{N}\s_-]+/gu, " ").replace(/\s{2,}/g, " ").trim();
+      return cleaned.length ? cleaned : normalizedEmail;
+    };
+
+    try {
+      const authOptionsResponse = await fetch("/api/auth/passkey/authenticate/options", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+
+      const authOptionsPayload = await authOptionsResponse.json().catch(() => ({}));
+
+      if (authOptionsResponse.ok && authOptionsPayload?.options) {
+        setStatusMessage("Подтвердите вход через Passkey");
+        const assertion = await startAuthentication(authOptionsPayload.options);
+
+        const verifyResponse = await fetch("/api/auth/passkey/authenticate/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            response: assertion,
+          }),
+        });
+
+        const verifyPayload = await verifyResponse.json().catch(() => ({}));
+
+        if (!verifyResponse.ok) {
+          throw new Error(verifyPayload?.message ?? "Не удалось подтвердить Passkey. Попробуйте еще раз.");
+        }
+
+        onSuccess();
+        return;
+      }
+
+      if (authOptionsResponse.status === 400 || authOptionsResponse.status === 404) {
+        setStatusMessage("Создаем Passkey для вашего аккаунта...");
+
+        const registerOptionsResponse = await fetch("/api/auth/passkey/register/options", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            displayName: deriveDisplayName(),
+          }),
+        });
+
+        const registerOptionsPayload = await registerOptionsResponse.json().catch(() => ({}));
+
+        if (!registerOptionsResponse.ok || !registerOptionsPayload?.options) {
+          throw new Error(registerOptionsPayload?.message ?? "Не удалось подготовить Passkey. Попробуйте позже.");
+        }
+
+        const attestation = await startRegistration(registerOptionsPayload.options);
+
+        const verifyRegistrationResponse = await fetch("/api/auth/passkey/register/verify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email: normalizedEmail,
+            response: attestation,
+          }),
+        });
+
+        const verifyRegistrationPayload = await verifyRegistrationResponse.json().catch(() => ({}));
+
+        if (!verifyRegistrationResponse.ok) {
+          throw new Error(verifyRegistrationPayload?.message ?? "Не удалось завершить регистрацию Passkey.");
+        }
+
+        onSuccess();
+        return;
+      }
+
+      throw new Error(authOptionsPayload?.message ?? "Не удалось получить параметры Passkey.");
+    } catch (err) {
+      console.error("Passkey flow failed", err);
+      if (err instanceof Error) {
+        if ((err as DOMException).name === "NotAllowedError") {
+          setError("Запрос Passkey был отменен. Попробуйте ещё раз.");
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError("Не удалось выполнить вход по Passkey. Попробуйте позже.");
+      }
+    } finally {
       setIsLoading(false);
-      onSuccess();
-    }, 1000);
+      setStatusMessage(null);
+    }
   };
 
   if (authMethod === 'magic') {
@@ -62,6 +240,9 @@ export function AuthForm({ onSuccess, onBack }: AuthFormProps) {
             <CardTitle>Проверьте почту</CardTitle>
             <CardDescription>
               Мы отправили ссылку для входа на {email}
+              {statusMessage && (
+                <span className="block mt-2 text-muted-foreground">{statusMessage}</span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -106,13 +287,22 @@ export function AuthForm({ onSuccess, onBack }: AuthFormProps) {
                   type="email"
                   placeholder="Электронная почта"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) {
+                      setError(null);
+                    }
+                  }}
                   className="h-12"
+                  disabled={isLoading}
                 />
+                {error && (
+                  <p className="mt-2 text-sm text-red-500">{error}</p>
+                )}
               </div>
               <Button 
                 onClick={handleMagicLink}
-                disabled={!email || isLoading}
+                disabled={!email.trim() || isLoading}
                 className="w-full h-12 bg-[#1dc962] hover:bg-[#19b558] text-white"
               >
                 <Mail className="w-5 h-5 mr-3" />
@@ -124,31 +314,31 @@ export function AuthForm({ onSuccess, onBack }: AuthFormProps) {
               или
             </div>
 
-            {/* Пасскей (если настроен) */}
-            {hasPasskey && (
+            <div className="space-y-2">
               <Button 
                 onClick={handlePasskeyAuth}
-                disabled={isLoading}
+                disabled={isLoading || !isPasskeyAvailable || !email.trim()}
                 variant="outline"
                 className="w-full h-12 relative"
               >
                 <Fingerprint className="w-5 h-5 mr-3" />
                 Passkey
               </Button>
-            )}
+              {!isPasskeyAvailable && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Passkey доступен на устройствах с Face ID, Touch ID или Windows Hello.
+                </p>
+              )}
+              {statusMessage && (
+                <p className="text-sm text-muted-foreground text-center">{statusMessage}</p>
+              )}
+            </div>
 
-            {/* VK ID */}
-            <Button 
-              onClick={handleVkAuth}
-              disabled={isLoading}
-              variant="outline"
-              className="w-full h-12 bg-[#0077FF] hover:bg-[#0066CC] text-white border-[#0077FF]"
-            >
-              <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15.684 0H8.316C1.592 0 0 1.592 0 8.316v7.368C0 22.408 1.592 24 8.316 24h7.368C22.408 24 24 22.408 24 15.684V8.316C24 1.592 22.408 0 15.684 0zm3.692 17.123h-1.744c-.66 0-.864-.525-2.05-1.714-1.033-1.01-1.49-.715-1.49.357v1.357c0 .357-.115.715-1.357.715-2.17 0-4.55-1.278-6.24-3.618C4.565 11.098 3.94 8.704 3.94 8.182c0-.357.115-.714.595-.714h1.744c.476 0 .66.206.845.69.857 2.284 2.284 4.27 2.88 4.27.22 0 .357-.115.357-.72V9.831c-.082-.99-.594-1.09-.594-1.446 0-.274.22-.55.577-.55h2.747c.396 0 .55.22.55.66v3.58c0 .396.165.55.275.55.22 0 .412-.154.825-.55 1.265-1.376 2.17-3.465 2.17-3.465.137-.274.357-.55.77-.55h1.744c.522 0 .632.275.522.66-.247 1.014-2.637 4.19-2.637 4.19-.192.275-.275.412 0 .715.192.22.825.825 1.237 1.33.715.825 1.265 1.51 1.402 2.006.137.495-.082.77-.577.77z"/>
-              </svg>
-              Войти с VK ID
-            </Button>
+            {/* VK ID Виджет */}
+            <VKIDWidget 
+              onSuccess={handleVkAuthSuccess}
+              onError={handleVkAuthError}
+            />
 
             <div className="text-center">
               <p className="text-sm text-muted-foreground">

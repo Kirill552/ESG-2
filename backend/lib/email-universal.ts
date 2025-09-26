@@ -17,6 +17,7 @@ export type EmailOptions = {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   fromEmail?: string;
   fromName?: string;
 };

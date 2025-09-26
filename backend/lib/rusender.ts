@@ -5,8 +5,10 @@
 
 import crypto from "crypto";
 
+type RuSenderStatus = "ok" | "error" | "skipped";
+
 export type RuSenderSendResult = {
-  status: string;
+  status: RuSenderStatus;
   email?: string;
   message_id?: string;
   error?: unknown;
@@ -16,6 +18,7 @@ export async function sendEmailViaRuSender(options: {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   fromEmail?: string;
   fromName?: string;
 }): Promise<RuSenderSendResult> {
@@ -42,7 +45,8 @@ export async function sendEmailViaRuSender(options: {
         },
         subject: options.subject,
         previewTitle: options.subject, // Используем тему как превью
-        html: options.html
+        html: options.html,
+        ...(options.text ? { text: options.text } : {})
       }
     };
 
@@ -55,22 +59,31 @@ export async function sendEmailViaRuSender(options: {
       body: JSON.stringify(payload)
     });
 
-    const responseData = await response.json();
+    const rawBody = await response.text();
+    let responseData: Record<string, unknown> = {};
+    if (rawBody) {
+      try {
+        responseData = JSON.parse(rawBody);
+      } catch (parseError) {
+        responseData = { message: rawBody };
+      }
+    }
 
     if (response.status === 201) {
       return {
         status: "ok",
         email: options.to,
-        message_id: responseData.uuid
+        message_id: typeof responseData.uuid === "string" ? responseData.uuid : undefined
       };
     } else {
       
       // Обработка различных типов ошибок
-      let errorMessage = responseData.message || `HTTP ${response.status}`;
+      const message = typeof responseData.message === "string" ? responseData.message : undefined;
+      let errorMessage = message || `HTTP ${response.status}`;
       
       switch (response.status) {
         case 400:
-          errorMessage = `Неверный формат запроса: ${responseData.message}`;
+          errorMessage = `Неверный формат запроса: ${message ?? "ошибка валидации"}`;
           break;
         case 401:
           errorMessage = 'Неверный API ключ';
@@ -85,16 +98,16 @@ export async function sendEmailViaRuSender(options: {
           errorMessage = 'Пользователь или домен не найден';
           break;
         case 422:
-          if (responseData.message?.includes('unsubscribed')) {
+          if (message?.includes('unsubscribed')) {
             errorMessage = 'Получатель отписался от рассылки';
-          } else if (responseData.message?.includes('complained')) {
+          } else if (message?.includes('complained')) {
             errorMessage = 'Получатель пожаловался на рассылку';
-          } else if (responseData.message?.includes("doesn't exist")) {
+          } else if (message?.includes("doesn't exist")) {
             errorMessage = 'Email получателя не существует';
-          } else if (responseData.message?.includes('unavailable')) {
+          } else if (message?.includes('unavailable')) {
             errorMessage = 'Email получателя недоступен';
           } else {
-            errorMessage = `Ошибка валидации: ${responseData.message}`;
+            errorMessage = `Ошибка валидации: ${message ?? 'уточните данные'}`;
           }
           break;
         case 503:

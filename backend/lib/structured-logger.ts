@@ -280,7 +280,11 @@ export function createLogger(component: string, config?: Partial<LoggerConfig>):
 export const queueLogger = createLogger('queue-manager');
 export const workerLogger = createLogger('ocr-worker');
 export const apiLogger = createLogger('api');
+export const authLogger = createLogger('auth');
 export const healthLogger = createLogger('health-monitor');
 export const metricsLogger = createLogger('metrics');
+
+// Дефолтный логгер для общего использования
+export const logger = apiLogger;
 
 export { StructuredLogger };

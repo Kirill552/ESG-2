@@ -15,55 +15,62 @@ enum AdminRole {
   SYSTEM_ADMIN
 }
 
+enum WebAuthnChallengeType {
+  REGISTRATION
+  AUTHENTICATION
+}
+
 model User {
-  id         String     @id @default(cuid())
-  email      String     @unique
-  phone      String?    @unique  // Поддержка телефонной авторизации
-  name       String?    // Объединенное имя для NextAuth
-  firstName  String?
-  lastName   String?
-  emailVerified DateTime?  // Для NextAuth
-  phoneVerified DateTime?  // Верификация телефона
-  image      String?       // Для NextAuth
-  isBlocked  Boolean    @default(false)
-  planExpiry DateTime?
-  usageStats Json?
-  lastLoginAt DateTime?  // Последний вход для безопасности
-  hashedPassword String?   // Хешированный пароль для входа
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
-  planType   PlanType   @default(TRIAL)
-  totpSecret String?
+  id                      String               @id @default(cuid())
+  email                   String               @unique
+  phone                   String?              @unique // Поддержка телефонной авторизации
+  name                    String? // Объединенное имя для NextAuth
+  firstName               String?
+  lastName                String?
+  emailVerified           DateTime? // Для NextAuth
+  phoneVerified           DateTime? // Верификация телефона
+  image                   String? // Для NextAuth
+  isBlocked               Boolean              @default(false)
+  planExpiry              DateTime?
+  usageStats              Json?
+  lastLoginAt             DateTime? // Последний вход для безопасности
+  hashedPassword          String? // Хешированный пароль для входа
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  planType                PlanType             @default(TRIAL)
+  totpSecret              String?
   // Активная организация пользователя
-  activeOrganizationId String?
+  activeOrganizationId    String?
   // удалены кредиты
-  documents  Document[]
-  payments   Payment[]
-  reports    Report[]
-  organization Organization? // Один пользователь может владеть одной организацией
+  documents               Document[]
+  payments                Payment[]
+  reports                 Report[]
+  organization            Organization? // Один пользователь может владеть одной организацией
   organizationMemberships OrganizationUser[]
-  activeOrganization Organization? @relation("UserActiveOrganization", fields: [activeOrganizationId], references: [id])
-  accounts   Account[]
-  sessions   Session[]
-  backupCodes BackupCode[]
-  webAuthnCredentials WebAuthnCredential[]
-  notifications Notification[]
+  activeOrganization      Organization?        @relation("UserActiveOrganization", fields: [activeOrganizationId], references: [id])
+  accounts                Account[]
+  sessions                Session[]
+  backupCodes             BackupCode[]
+  webAuthnCredentials     WebAuthnCredential[]
+  webAuthnChallenges      WebAuthnChallenge[]
+  notifications           Notification[]
+  magicLinkTokens         MagicLinkToken[]
 
   @@map("users")
 }
 
 // WebAuthn Passkeys модель для биометрической аутентификации
 model WebAuthnCredential {
-  id            String   @id @default(cuid())
-  userId        String
-  credentialId  String   @unique
-  publicKey     Bytes
-  counter       BigInt   @default(0)
-  transports    String[]  // usb, nfc, ble, internal
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  userId       String
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      BigInt   @default(0)
+  transports   String[] // usb, nfc, ble, internal
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([credentialId])
@@ -78,7 +85,7 @@ model Document {
   filePath              String
   fileSize              Int
   fileType              String
-  fileHash              String?        // sha256 хеш содержимого файла для дедупликации
+  fileHash              String? // sha256 хеш содержимого файла для дедупликации
   status                DocumentStatus @default(UPLOADED)
   ocrProcessed          Boolean        @default(false)
   ocrData               Json?
@@ -213,36 +220,36 @@ model SystemSettings {
 }
 
 model AdminUser {
-  id           String     @id @default(cuid())
-  email        String     @unique
-  passwordHash String
-  role         AdminRole  @default(SUPPORT_ADMIN)
-  isActive     Boolean    @default(true)
-  totpSecret   String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  sessions     AdminSession[]
-  permissions  AdminPermission[]
+  id                  String                    @id @default(cuid())
+  email               String                    @unique
+  passwordHash        String
+  role                AdminRole                 @default(SUPPORT_ADMIN)
+  isActive            Boolean                   @default(true)
+  totpSecret          String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  sessions            AdminSession[]
+  permissions         AdminPermission[]
   webAuthnCredentials AdminWebAuthnCredential[]
   recoveryCodes       AdminRecoveryCode[]
   securityIncidents   AdminSecurityIncident[]
 
-  @@map("admin_users")
   @@index([role])
   @@index([isActive])
+  @@map("admin_users")
 }
 
 model AdminSession {
-  id         String   @id @default(cuid())
-  adminId    String
-  tokenJti   String   @unique
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  adminId   String
+  tokenJti  String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
-  @@map("admin_sessions")
   @@index([adminId])
   @@index([expiresAt])
+  @@map("admin_sessions")
 }
 
 model AdminPermission {
@@ -253,9 +260,9 @@ model AdminPermission {
   createdAt DateTime  @default(now())
   admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
-  @@map("admin_permissions")
   @@index([adminId])
   @@index([resource, action])
+  @@map("admin_permissions")
 }
 
 /// WebAuthn Passkeys для администраторов
@@ -269,7 +276,7 @@ model AdminWebAuthnCredential {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  admin        AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
   @@index([credentialId])
@@ -278,14 +285,14 @@ model AdminWebAuthnCredential {
 
 /// Резервные коды восстановления для администраторов
 model AdminRecoveryCode {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   adminId   String
   codeHash  String
-  used      Boolean  @default(false)
+  used      Boolean   @default(false)
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
-  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
 
   @@index([adminId, used])
   @@map("admin_recovery_codes")
@@ -293,17 +300,17 @@ model AdminRecoveryCode {
 
 /// Журнал инцидентов безопасности в админке
 model AdminSecurityIncident {
-  id          String   @id @default(cuid())
-  adminId     String?
-  type        String   // rate_limit|anomaly|revoke|step_up_required|mfa_failure
-  severity    String   @default("INFO") // INFO|WARN|ERROR
-  message     String
-  ipAddress   String?
-  userAgent   String?
-  metadata    Json?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  adminId   String?
+  type      String // rate_limit|anomaly|revoke|step_up_required|mfa_failure
+  severity  String   @default("INFO") // INFO|WARN|ERROR
+  message   String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
 
-  admin       AdminUser? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  admin AdminUser? @relation(fields: [adminId], references: [id], onDelete: SetNull)
 
   @@index([type])
   @@index([createdAt])
@@ -409,24 +416,24 @@ model QueueMetric {
 // удалены модели credit_transactions, credits
 
 model Organization {
-  id          String     @id @default(cuid())
-  userId      String     @unique
-  name        String
-  inn         String?    @unique
-  address     String?
-  phone       String?
-  email       String?
-  isBlocked   Boolean    @default(false)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  auditLogs   AuditLog[]
-  
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String     @id @default(cuid())
+  userId    String     @unique
+  name      String
+  inn       String?    @unique
+  address   String?
+  phone     String?
+  email     String?
+  isBlocked Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  auditLogs AuditLog[]
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   profile     OrganizationProfile?
   users       OrganizationUser[]
   invitations OrganizationInvitation[]
-  activeUsers User[]     @relation("UserActiveOrganization")
+  activeUsers User[]                   @relation("UserActiveOrganization")
 
   @@map("organizations")
 }
@@ -444,27 +451,27 @@ enum OrganizationRoleEnum {
 }
 
 model OrganizationProfile {
-  id                 String                     @id @default(cuid())
-  organizationId     String                     @unique
-  fullName           String?
-  shortName          String?
-  inn                String                     @unique
-  kpp                String?
-  ogrn               String?
-  legalAddress       String?
-  bankAccount        String?
-  bankBic            String?
-  bankName           String?
-  emailForBilling    String?
-  phone              String?
-  tochkaAccountId    String?
-  tochkaCustomerCode String?
+  id                  String                    @id @default(cuid())
+  organizationId      String                    @unique
+  fullName            String?
+  shortName           String?
+  inn                 String                    @unique
+  kpp                 String?
+  ogrn                String?
+  legalAddress        String?
+  bankAccount         String?
+  bankBic             String?
+  bankName            String?
+  emailForBilling     String?
+  phone               String?
+  tochkaAccountId     String?
+  tochkaCustomerCode  String?
   defaultReportFormat String?
-  status             OrganizationProfileStatus  @default(DRAFT)
-  checkoData         Json?
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
-  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  status              OrganizationProfileStatus @default(DRAFT)
+  checkoData          Json?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  organization        Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([inn])
   @@map("organization_profiles")
@@ -581,7 +588,7 @@ model BankInvoice {
   organizationId     String
   invoiceNumber      String        @unique
   bankInvoiceId      String        @unique
-  customerCode       String?       // Bank Tochka customerCode (sandbox/production)
+  customerCode       String? // Bank Tochka customerCode (sandbox/production)
   invoiceType        InvoiceType
   amount             Decimal       @db.Decimal(12, 2)
   currency           String        @default("RUB")
@@ -686,31 +693,31 @@ enum SubscriptionStatus {
 
 // Auth.js совместимые таблицы
 model Account {
-  id                 String   @id @default(cuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?
-  access_token       String?
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?
-  session_state      String?
-  password           String?  // Хешированный пароль для credentials провайдера
-  
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  password          String? // Хешированный пароль для credentials провайдера
+
   // WebAuthn/Passkey поля для биометрической авторизации
-  credentialID       String?  // Unique identifier for the credential
-  credentialPublicKey Bytes?  // Public key for verification
-  counter            Int?     // Signature counter for replay protection
+  credentialID         String? // Unique identifier for the credential
+  credentialPublicKey  Bytes? // Public key for verification
+  counter              Int? // Signature counter for replay protection
   credentialDeviceType String? // "platform" or "cross-platform"
-  credentialBackedUp Boolean? // Whether the credential is backed up
-  transports         String[] @default([]) // Transport methods (e.g., ["internal", "hybrid"])
-  
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialBackedUp   Boolean? // Whether the credential is backed up
+  transports           String[] @default([]) // Transport methods (e.g., ["internal", "hybrid"])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
@@ -719,12 +726,12 @@ model Account {
 }
 
 model Session {
-  id            String   @id @default(cuid())
-  sessionToken  String   @unique
-  userId        String
-  expires       DateTime
-  createdAt     DateTime @default(now())
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expires])
@@ -740,14 +747,45 @@ model VerificationToken {
   @@map("verification_tokens")
 }
 
+model MagicLinkToken {
+  id             String                  @id @default(cuid())
+  email          String
+  emailHash      String                  @db.Char(64)
+  userId         String?
+  tokenHash      String                  @unique @db.Char(64)
+  redirectTo     String?
+  requestedIp    String?
+  consumedIp     String?
+  userAgent      String?
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  deliveryStatus MagicLinkDeliveryStatus @default(PENDING)
+  deliveryError  String?
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([emailHash, expiresAt])
+  @@index([requestedIp, createdAt])
+  @@map("magic_link_tokens")
+}
+
+enum MagicLinkDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
 model OtpCode {
-  id         String   @id @default(cuid())
-  contact    String
-  codeHash   String
-  purpose    String?
-  attempts   Int      @default(0)
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  contact   String
+  codeHash  String
+  purpose   String?
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   @@index([contact])
   @@index([expiresAt])
@@ -826,7 +864,7 @@ model RateLimitEvent {
 model SecurityAttempt {
   id         String   @id @default(cuid())
   ip         String
-  identifier String?  // email, phone, username
+  identifier String? // email, phone, username
   endpoint   String   @default("auth")
   success    Boolean  @default(false)
   userAgent  String?
@@ -841,7 +879,7 @@ model SecurityAttempt {
 model SecurityBlock {
   id         String   @id @default(cuid())
   ip         String
-  identifier String?  // email, phone, username
+  identifier String? // email, phone, username
   endpoint   String   @default("auth")
   attempts   Int      @default(0)
   reason     String
@@ -858,8 +896,8 @@ model SecurityLog {
   id        String   @id @default(cuid())
   userId    String?
   ip        String
-  event     String   // login_attempt, login_success, login_failed, blocked, captcha_required
-  details   Json     // дополнительная информация о событии
+  event     String // login_attempt, login_success, login_failed, blocked, captcha_required
+  details   Json // дополнительная информация о событии
   timestamp DateTime @default(now())
 
   @@index([userId, timestamp])
@@ -869,15 +907,22 @@ model SecurityLog {
 
 /// WebAuthn challenges (замена Redis)
 model WebAuthnChallenge {
-  id        String   @id @default(cuid())
-  email     String
+  id        String                @id @default(cuid())
+  userId    String?
+  email     String?
   challenge String
-  type      String   // 'register' или 'authenticate'
-  data      Json     // дополнительные данные
+  type      WebAuthnChallengeType
+  data      Json? // дополнительные данные
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  createdAt DateTime              @default(now())
+  ipAddress String?
+  userAgent String?
 
-  @@unique([email, type])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email, type])
+  @@index([type, createdAt])
   @@index([expiresAt])
   @@map("webauthn_challenges")
 }
@@ -900,10 +945,10 @@ model GigaChatToken {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // document_data_edited, document_correction_submitted, document_failed_processing, system_error, user_feedback
+  type      String // document_data_edited, document_correction_submitted, document_failed_processing, system_error, user_feedback
   title     String
   message   String
-  metadata  Json?    // дополнительные данные (documentId, changes, triggeredBy, priority, etc.)
+  metadata  Json? // дополнительные данные (documentId, changes, triggeredBy, priority, etc.)
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
