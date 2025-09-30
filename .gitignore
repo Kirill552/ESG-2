@@ -52,5 +52,7 @@ storage/
 data/
 *.sqlite
 *.db
-
-
+.claude
+.mcp.json
+.playwright-mcp
+CLAUDE.md

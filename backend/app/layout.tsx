@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { Toaster } from './components/ui/toaster'
+import { Providers } from './providers'
 
 export const metadata: Metadata = {
   title: 'ESG-Лайт — Автоматизация отчетности 296-ФЗ',
@@ -14,7 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body>
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
+      </body>
     </html>
   )
 }

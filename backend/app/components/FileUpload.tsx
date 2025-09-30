@@ -1,37 +1,71 @@
-﻿import React, { useState, useCallback } from 'react';
+﻿import React, { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Upload, 
-  X, 
-  FileText, 
-  FileSpreadsheet, 
-  Image, 
+import {
+  Upload,
+  X,
+  FileText,
+  FileSpreadsheet,
+  Image,
   CheckCircle,
   AlertTriangle,
   Loader2,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-
-interface FileWithProgress {
-  file: File;
-  id: string;
-  progress: number;
-  status: 'uploading' | 'success' | 'error' | 'pending';
-  error?: string;
-}
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { useFileUpload } from '@/lib/hooks/useFileUpload';
+import { useToast } from '@/lib/hooks/use-toast';
 
 interface FileUploadProps {
   isOpen: boolean;
   onClose: () => void;
+  onUploadComplete?: () => void; // Callback для обновления списка документов
 }
 
-export function FileUpload({ isOpen, onClose }: FileUploadProps) {
-  const [files, setFiles] = useState<FileWithProgress[]>([]);
+export function FileUpload({ isOpen, onClose, onUploadComplete }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const { toast } = useToast();
+
+  const {
+    files,
+    uploading,
+    progress: overallProgress,
+    addFiles,
+    removeFile,
+    clearFiles,
+    uploadFiles,
+    cancelUpload,
+    validateFile,
+  } = useFileUpload({
+    maxFiles: 20,
+    onUploadComplete: (uploadedFiles) => {
+      toast({
+        title: "Загрузка завершена",
+        description: `Успешно загружено ${uploadedFiles.length} файлов`,
+      });
+      onUploadComplete?.();
+    },
+    onUploadError: (file, error) => {
+      toast({
+        title: "Ошибка загрузки",
+        description: `${file.file.name}: ${error}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Сброс файлов при закрытии модалки
+  useEffect(() => {
+    if (!isOpen) {
+      clearFiles();
+      setSelectedCategory('');
+    }
+  }, [isOpen, clearFiles]);
 
   const getFileIcon = (filename: string) => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -58,10 +92,10 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
+
     const dropped = Array.from(e.dataTransfer.files);
     addFiles(dropped);
-  }, []);
+  }, [addFiles]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -70,60 +104,23 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
     }
   };
 
-  const addFiles = (newFiles: File[]) => {
-    const filesWithProgress: FileWithProgress[] = newFiles.map(file => ({
-      file,
-      id: Math.random().toString(36).substr(2, 9),
-      progress: 0,
-      status: 'pending' as const
-    }));
-    
-    setFiles(prev => [...prev, ...filesWithProgress]);
-    
-    // Симуляция загрузки
-    filesWithProgress.forEach(fileItem => {
-      setTimeout(() => {
-        uploadFile(fileItem);
-      }, Math.random() * 1000);
-    });
+  const handleUpload = async () => {
+    try {
+      await uploadFiles(selectedCategory || undefined);
+    } catch (error) {
+      toast({
+        title: "Ошибка загрузки",
+        description: error instanceof Error ? error.message : "Произошла ошибка",
+        variant: "destructive",
+      });
+    }
   };
 
-  const uploadFile = (fileItem: FileWithProgress) => {
-    setFiles(prev => prev.map(f => 
-      f.id === fileItem.id ? { ...f, status: 'uploading' } : f
-    ));
-
-    // Симуляция прогресса загрузки
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 30;
-      if (progress >= 100) {
-        progress = 100;
-        clearInterval(interval);
-        
-        // Симуляция успеха/ошибки
-        const isSuccess = Math.random() > 0.1; // 90% успеха
-        
-        setFiles(prev => prev.map(f => 
-          f.id === fileItem.id 
-            ? { 
-                ...f, 
-                progress: 100, 
-                status: isSuccess ? 'success' : 'error',
-                error: isSuccess ? undefined : 'Ошибка загрузки файла'
-              } 
-            : f
-        ));
-      } else {
-        setFiles(prev => prev.map(f => 
-          f.id === fileItem.id ? { ...f, progress } : f
-        ));
-      }
-    }, 200);
-  };
-
-  const removeFile = (id: string) => {
-    setFiles(prev => prev.filter(f => f.id !== id));
+  const handleClose = () => {
+    if (uploading) {
+      cancelUpload();
+    }
+    onClose();
   };
 
   const formatFileSize = (bytes: number) => {
@@ -134,7 +131,7 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const getStatusColor = (status: FileWithProgress['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case 'success': return 'text-green-600';
       case 'error': return 'text-red-600';
@@ -143,7 +140,7 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
     }
   };
 
-  const getStatusIcon = (status: FileWithProgress['status']) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case 'success': return CheckCircle;
       case 'error': return AlertTriangle;
@@ -151,6 +148,16 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
       default: return Upload;
     }
   };
+
+  const categories = [
+    { value: '', label: 'Автоматически' },
+    { value: 'PRODUCTION', label: '🏭 Производство' },
+    { value: 'SUPPLIERS', label: '🚛 Поставщики' },
+    { value: 'WASTE', label: '🗑️ Отходы' },
+    { value: 'TRANSPORT', label: '🚚 Транспорт' },
+    { value: 'ENERGY', label: '⚡ Энергия' },
+    { value: 'OTHER', label: '📋 Другое' },
+  ];
 
   if (!isOpen) return null;
 
@@ -170,14 +177,58 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
           onClick={e => e.stopPropagation()}
           className="w-full max-w-4xl max-h-[80vh] overflow-hidden"
         >
-          <Card className="border-border/50 shadow-2xl">
-            <CardHeader className="border-b border-border/50 bg-gradient-to-r from-card to-muted/20">
+          <Card className="bg-white border-gray-200 shadow-2xl">
+            <CardHeader className="border-b border-gray-200 bg-gradient-to-r from-white to-gray-50/20">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-2xl">Загрузка документов</CardTitle>
-                <Button variant="ghost" size="icon" onClick={onClose}>
+                <div>
+                  <CardTitle className="text-2xl">Загрузка документов</CardTitle>
+                  {files.length > 0 && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {files.length} файлов • {files.filter(f => f.status === 'success').length} загружено
+                      {uploading && ` • ${overallProgress}% завершено`}
+                    </p>
+                  )}
+                </div>
+                <Button variant="ghost" size="icon" onClick={handleClose}>
                   <X className="w-5 h-5" />
                 </Button>
               </div>
+
+              {files.length > 0 && (
+                <div className="flex items-center gap-4 mt-4">
+                  <div className="flex-1">
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Категория документов
+                    </label>
+                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Выберите категорию" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {uploading && (
+                    <div className="flex-1">
+                      <label className="text-sm font-medium text-gray-700 mb-2 block">
+                        Общий прогресс
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Progress value={overallProgress} className="flex-1" />
+                        <span className="text-sm text-gray-600 min-w-[3rem]">
+                          {overallProgress}%
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardHeader>
             
             <CardContent className="p-6 max-h-[60vh] overflow-y-auto">
@@ -189,15 +240,15 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
                 whileHover={{ scale: 1.01 }}
                 className={`
                   relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300
-                  ${isDragging 
-                    ? 'border-primary bg-primary/5 scale-[1.02]' 
-                    : 'border-border hover:border-primary/50 hover:bg-muted/30'
+                  ${isDragging
+                    ? 'border-[#1dc962] bg-[#1dc962]/5 scale-[1.02]'
+                    : 'border-gray-300 hover:border-[#1dc962]/50 hover:bg-gray-50'
                   }
                 `}
               >
                 <div className="flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/10 rounded-2xl flex items-center justify-center">
-                    <Upload className="w-8 h-8 text-primary" />
+                  <div className="w-16 h-16 bg-gradient-to-br from-[#1dc962]/20 to-[#1dc962]/10 rounded-2xl flex items-center justify-center">
+                    <Upload className="w-8 h-8 text-[#1dc962]" />
                   </div>
                   <div>
                     <h3 className="text-xl font-semibold mb-2">
@@ -214,7 +265,7 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
                         accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png"
                       />
                     </Button>
-                    <p className="text-muted-foreground">
+                    <p className="text-gray-600">
                       Поддерживаются: PDF, DOC, DOCX, XLS, XLSX, CSV, TXT, JPG, PNG
                     </p>
                   </div>
@@ -236,19 +287,19 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
                       {files.map((fileItem) => {
                         const FileIcon = getFileIcon(fileItem.file.name);
                         const StatusIcon = getStatusIcon(fileItem.status);
-                        
+
                         return (
                           <motion.div
                             key={fileItem.id}
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, x: -100 }}
-                            className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border border-border/50"
+                            className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200"
                           >
-                            <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-border/50">
-                              <FileIcon className="w-5 h-5 text-muted-foreground" />
+                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-gray-200">
+                              <FileIcon className="w-5 h-5 text-gray-600" />
                             </div>
-                            
+
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between mb-1">
                                 <p className="font-medium truncate pr-2">
@@ -269,23 +320,27 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
                                     size="icon"
                                     className="w-6 h-6"
                                     onClick={() => removeFile(fileItem.id)}
+                                    disabled={fileItem.status === 'uploading'}
                                   >
                                     <X className="w-4 h-4" />
                                   </Button>
                                 </div>
                               </div>
-                              
+
                               <div className="flex items-center gap-4">
-                                <span className="text-sm text-muted-foreground">
+                                <span className="text-sm text-gray-600">
                                   {formatFileSize(fileItem.file.size)}
                                 </span>
-                                
-                                {fileItem.status === 'uploading' && (
-                                  <div className="flex-1">
-                                    <Progress value={fileItem.progress} className="h-2" />
+
+                                {fileItem.status === 'uploading' && fileItem.progress && (
+                                  <div className="flex-1 flex items-center gap-2">
+                                    <Progress value={fileItem.progress.percentage} className="h-2 flex-1" />
+                                    <span className="text-xs text-gray-500 min-w-[2.5rem]">
+                                      {Math.round(fileItem.progress.percentage)}%
+                                    </span>
                                   </div>
                                 )}
-                                
+
                                 {fileItem.error && (
                                   <span className="text-sm text-red-600">
                                     {fileItem.error}
@@ -299,16 +354,48 @@ export function FileUpload({ isOpen, onClose }: FileUploadProps) {
                     </AnimatePresence>
                   </div>
 
-                  <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-border/50">
-                    <Button variant="outline" onClick={onClose}>
-                      Отмена
-                    </Button>
-                    <Button 
-                      onClick={onClose}
-                      disabled={files.some(f => f.status === 'uploading')}
-                    >
-                      Готово
-                    </Button>
+                  <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-200">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      {files.length > 0 && (
+                        <>
+                          <span>
+                            {files.filter(f => f.status === 'pending').length} ожидают загрузки
+                          </span>
+                          {files.filter(f => f.status === 'error').length > 0 && (
+                            <span className="text-red-600">
+                              • {files.filter(f => f.status === 'error').length} с ошибками
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    <div className="flex gap-3">
+                      {uploading && (
+                        <Button variant="outline" onClick={cancelUpload}>
+                          <X className="w-4 h-4 mr-2" />
+                          Отменить загрузку
+                        </Button>
+                      )}
+
+                      <Button variant="outline" onClick={handleClose}>
+                        {uploading ? 'Закрыть' : 'Отмена'}
+                      </Button>
+
+                      {files.filter(f => f.status === 'pending').length > 0 && !uploading && (
+                        <Button onClick={handleUpload}>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Загрузить {files.filter(f => f.status === 'pending').length} файлов
+                        </Button>
+                      )}
+
+                      {files.filter(f => f.status === 'success').length > 0 && !uploading && (
+                        <Button onClick={handleClose}>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Готово
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

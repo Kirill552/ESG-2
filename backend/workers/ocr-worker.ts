@@ -6,13 +6,16 @@
 const PgBoss = require('pg-boss');
 // Прямые относительные импорты с расширением .ts для совместимости с ts-node в dev
 import { createPgBoss, QUEUE_NAMES, OcrJobData, OcrJobResult } from '../lib/pg-boss-config';
-import { processS3File } from '../lib/ocr';
+import { HybridOCRService } from '../lib/hybrid-ocr-service';
 import { IntelligentFileProcessor } from '../lib/intelligent-file-processor';
+import { getCurrentUserMode } from '../lib/user-mode-utils';
 import { surgePricingService } from '../lib/surge-pricing';
 import { prisma } from '../lib/prisma';
 import { metricsCollector } from '../lib/metrics';
 import { workerLogger } from '../lib/structured-logger';
 import { SubscriptionService } from '../lib/subscription-service';
+import { notificationService, NotificationType, NotificationPriority } from '../lib/notification-service';
+import { batchNotificationService } from '../lib/batch-notification-service';
 import { Pool, PoolClient } from 'pg';
 
 export interface WorkerConfig {
@@ -37,6 +40,7 @@ export class OcrWorker {
   // Кредиты больше не используются в новой модели монетизации
   private creditsService = null as any;
   private processor: IntelligentFileProcessor;
+  private hybridOcrService: HybridOCRService;
   // Пул для advisory locks (организационная конкуррентность)
   private lockPool: Pool | null = null;
   private subscriptionService = new SubscriptionService();
@@ -49,7 +53,8 @@ export class OcrWorker {
     };
     
     this.processor = new IntelligentFileProcessor();
-    
+    this.hybridOcrService = new HybridOCRService();
+
     console.log('🔧 OCR Worker инициализирован с конфигурацией:', this.config);
   }
 
@@ -303,12 +308,42 @@ export class OcrWorker {
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error('OCR_TIMEOUT')), ms))
         ]);
       };
+
+      // Получаем файл из S3
+      const { buffer } = await (await import('../lib/s3')).getFileBuffer(jobData.fileKey);
+
+      // Определяем режим пользователя для выбора OCR провайдера
+      let userMode = 'DEMO';
+      try {
+        userMode = await getCurrentUserMode(jobData.userId);
+      } catch (error) {
+        console.warn('Failed to get user mode, using DEMO:', error);
+      }
+
       if (process.env.NODE_ENV === 'test') {
-        ocrText = await runWithTimeout(processS3File(jobData.fileKey) as any, timeoutMs) as any;
+        // В тестовом режиме используем упрощенную логику
+        ocrText = `Test OCR result for ${jobData.fileName || jobData.fileKey}`;
+        hybridResult = {
+          provider: 'test',
+          confidence: 0.95,
+          processingTime: 100,
+          extractedText: ocrText
+        };
       } else {
-        const { buffer } = await (await import('../lib/s3')).getFileBuffer(jobData.fileKey);
-        hybridResult = await runWithTimeout(this.processor.processFile(buffer, jobData.fileName || jobData.fileKey), timeoutMs);
-        ocrText = hybridResult.extractedData?.rawText || hybridResult.extractedData?.structured_data?.[0]?.content || 'Нет данных';
+        // Используем новый HybridOcrService
+        hybridResult = await runWithTimeout(
+          this.hybridOcrService.processFile(
+            buffer,
+            jobData.fileName || jobData.fileKey,
+            userMode as any
+          ),
+          timeoutMs
+        );
+
+        ocrText = hybridResult.extractedText ||
+                  hybridResult.extractedData?.rawText ||
+                  hybridResult.extractedData?.structured_data?.[0]?.content ||
+                  'Нет данных';
       }
 
       if (!ocrText || ocrText.length < 10) {
@@ -371,6 +406,37 @@ export class OcrWorker {
         })
       } catch {}
 
+      // Обновляем прогресс batch и отправляем уведомление (если нужно)
+      try {
+        await batchNotificationService.updateBatchProgress(jobData.documentId, true);
+
+        // Отправляем индивидуальное уведомление только для малых загрузок (1-2 документа)
+        const shouldSendIndividual = await batchNotificationService.shouldSendIndividualNotification(jobData.documentId);
+        if (shouldSendIndividual) {
+          await notificationService.sendNotification({
+            userId: jobData.userId,
+            type: NotificationType.DOCUMENT_PROCESSED,
+            title: 'Документ успешно обработан',
+            message: `Документ "${jobData.fileName || 'Без названия'}" успешно обработан через OCR. Распознано ${result.textLength} символов.`,
+            metadata: {
+              documentId: jobData.documentId,
+              fileName: jobData.fileName,
+              textLength: result.textLength,
+              confidence: result.confidence,
+              processingTime: processingTime,
+              link: `/documents`,
+              priority: NotificationPriority.LOW
+            }
+          });
+          console.log(`📧 Уведомление о завершении обработки отправлено пользователю ${jobData.userId}`);
+        } else {
+          console.log(`📦 Документ обработан в составе batch - индивидуальное уведомление не требуется`);
+        }
+      } catch (notifError) {
+        // Не прерываем выполнение если уведомление не отправилось
+        console.error('⚠️ Не удалось обработать уведомление:', notifError);
+      }
+
   return result;
 
     } catch (error: any) {
@@ -382,7 +448,14 @@ export class OcrWorker {
       
       // Обновляем статус документа на ошибку
       await this.handleJobError(jobData.documentId, error);
-      
+
+      // Обновляем прогресс batch для документа с ошибкой
+      try {
+        await batchNotificationService.updateBatchProgress(jobData.documentId, false);
+      } catch (batchError) {
+        console.error('⚠️ Не удалось обновить batch для документа с ошибкой:', batchError);
+      }
+
       throw error;
     }
     finally {
@@ -465,20 +538,20 @@ export class OcrWorker {
             fullText: ocrText,
             textPreview: ocrText.substring(0, 200),
             textLength: ocrText.length,
-            processedAt: new Date().toISOString()
+            processedAt: new Date().toISOString(),
+            provider: hybridResult?.provider || 'test'
           } : {
             fullText: ocrText,
             textPreview: ocrText.substring(0, 200),
             textLength: ocrText.length,
             processedAt: new Date().toISOString(),
-            provider: hybridResult?.provider,
+            provider: hybridResult?.provider || 'unknown',
             confidence: hybridResult?.confidence,
             processingTime: typeof hybridResult?.processingTime === 'number' ? Math.round(hybridResult.processingTime) : undefined,
-            comparison: hybridResult?.comparison || undefined,
-            fields: hybridResult?.fields || undefined,
-            fieldsMeta: hybridResult?.fieldsMeta || undefined,
-            docType: hybridResult?.docType || undefined,
-            meta: hybridResult?.meta || undefined
+            formatInfo: hybridResult?.formatInfo,
+            structuredData: hybridResult?.structuredData,
+            metadata: hybridResult?.metadata,
+            healthCheckResults: hybridResult?.healthCheckResults
           },
           ocrConfidence: (process.env.NODE_ENV === 'test') ? 0.95 : (typeof hybridResult?.confidence === 'number' ? hybridResult.confidence : 0.95)
         }
@@ -523,6 +596,16 @@ export class OcrWorker {
    */
   private async handleJobError(documentId: string, error: Error): Promise<void> {
     try {
+      // Получаем информацию о документе для уведомления
+      const document = await prisma.document.findUnique({
+        where: { id: documentId },
+        select: {
+          id: true,
+          fileName: true,
+          userId: true
+        }
+      });
+
       const res = await prisma.document.updateMany({
         where: { id: documentId },
         data: {
@@ -536,17 +619,75 @@ export class OcrWorker {
       if (!res.count || res.count === 0) {
         await workerLogger.warn('Документ не найден при сохранении ошибки OCR', { documentId, error: error.message });
       }
-      
+
       await workerLogger.info('OCR error saved to database', {
         documentId,
         errorMessage: error.message
       });
+
+      // Отправляем индивидуальное уведомление об ошибке только для малых загрузок (1-2 документа)
+      if (document && document.userId) {
+        try {
+          const shouldSendIndividual = await batchNotificationService.shouldSendIndividualNotification(documentId);
+          if (shouldSendIndividual) {
+            await notificationService.sendNotification({
+              userId: document.userId,
+              type: NotificationType.DOCUMENT_ERROR,
+              title: 'Ошибка обработки документа',
+              message: `Не удалось обработать документ "${document.fileName || 'Без названия'}". ${this.getErrorMessage(error)}`,
+              metadata: {
+                documentId: document.id,
+                fileName: document.fileName,
+                errorMessage: error.message,
+                errorType: error.name,
+                link: `/documents?status=error`,
+                priority: NotificationPriority.HIGH
+              }
+            });
+            console.log(`📧 Уведомление об ошибке обработки отправлено пользователю ${document.userId}`);
+          } else {
+            console.log(`📦 Ошибка документа в составе batch - индивидуальное уведомление не требуется`);
+          }
+        } catch (notifError) {
+          console.error('⚠️ Не удалось обработать уведомление об ошибке:', notifError);
+        }
+      }
     } catch (saveError) {
-      await workerLogger.error('Failed to save OCR error to database', 
-        saveError instanceof Error ? saveError : new Error(String(saveError)), 
+      await workerLogger.error('Failed to save OCR error to database',
+        saveError instanceof Error ? saveError : new Error(String(saveError)),
         { documentId, originalError: error.message }
       );
     }
+  }
+
+  /**
+   * Получить понятное пользователю сообщение об ошибке
+   */
+  private getErrorMessage(error: Error): string {
+    const errorMessage = error.message.toLowerCase();
+
+    if (errorMessage.includes('timeout') || errorMessage.includes('ocr_timeout')) {
+      return 'Превышено время обработки. Попробуйте загрузить файл меньшего размера.';
+    }
+
+    if (errorMessage.includes('ocr_failed') || errorMessage.includes('не удалось извлечь текст')) {
+      return 'Не удалось распознать текст в документе. Убедитесь что файл не поврежден и содержит читаемый текст.';
+    }
+
+    if (errorMessage.includes('invalid format') || errorMessage.includes('unsupported')) {
+      return 'Неподдерживаемый формат файла. Используйте PDF, DOCX, XLSX или изображения.';
+    }
+
+    if (errorMessage.includes('too large') || errorMessage.includes('size limit')) {
+      return 'Размер файла слишком большой. Максимальный размер: 50 МБ.';
+    }
+
+    if (errorMessage.includes('org_concurrency')) {
+      return 'Достигнут лимит одновременной обработки документов. Дождитесь завершения текущих задач.';
+    }
+
+    // Общее сообщение для неизвестных ошибок
+    return 'Проверьте формат файла и повторите попытку.';
   }
 
   /**

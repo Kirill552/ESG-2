@@ -10,12 +10,12 @@ import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
 import { motion } from 'motion/react';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  FileText, 
-  Clock, 
-  CheckCircle, 
+import {
+  TrendingUp,
+  TrendingDown,
+  FileText,
+  Clock,
+  CheckCircle,
   AlertTriangle,
   Upload,
   Eye,
@@ -24,7 +24,8 @@ import {
   FileCheck,
   Calendar,
   Plus,
-  Zap
+  Zap,
+  Shield
 } from 'lucide-react';
 
 type Page = 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
@@ -34,61 +35,99 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
+interface DashboardData {
+  kpiCards: any[];
+  recentDocuments: any[];
+  recentReports: any[];
+  progress296FZ: {
+    dataCollection: { label: string; percentage: number; color: string };
+    documentProcessing: { label: string; percentage: number; color: string };
+    reportGeneration: { label: string; percentage: number; color: string };
+  };
+}
+
+// Маппинг строковых названий иконок на компоненты
+const iconMap: Record<string, any> = {
+  Leaf,
+  FileText,
+  FileCheck,
+  Zap,
+  BarChart3,
+  Shield
+};
+
 export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
   const [showEcoParticles, setShowEcoParticles] = React.useState(false);
-  
-  const stats = [
-    {
-      title: 'Общие выбросы',
-      value: 1247,
-      unit: 'тСО₂-экв',
-      change: -5.2,
-      period: 'к прошлому году',
-      icon: Leaf,
-      color: 'green',
-      metric: 'co2' as const
-    },
-    {
-      title: 'Документов загружено',
-      value: 89,
-      unit: 'файлов',
-      change: 12.5,
-      period: 'за месяц',
-      icon: FileText,
-      color: 'blue'
-    },
-    {
-      title: 'Готовых отчетов',
-      value: 23,
-      unit: 'отчета',
-      change: 8.1,
-      period: 'за квартал',
-      icon: FileCheck,
-      color: 'purple'
-    },
-    {
-      title: 'Экономия времени',
-      value: 156,
-      unit: 'часов',
-      change: 45.2,
-      period: 'за год',
-      icon: Zap,
-      color: 'orange'
-    }
-  ];
+  const [dashboardData, setDashboardData] = React.useState<DashboardData | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const recentDocuments = [
-    { name: 'Энергопотребление_Q4.xlsx', status: 'processed', date: '2 часа назад' },
-    { name: 'Транспорт_данные.pdf', status: 'processing', date: '4 часа назад' },
-    { name: 'Производство_отчет.docx', status: 'pending', date: '1 день назад' },
-    { name: 'Поставщики_выбросы.csv', status: 'processed', date: '2 дня назад' },
-  ];
+  // Загружаем данные дашборда при монтировании компонента
+  React.useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/dashboard', {
+          credentials: 'include'
+        });
 
-  const recentReports = [
-    { name: 'Отчет о выбросах Q4 2024', status: 'ready', date: '15 декабря 2024' },
-    { name: 'Сводный отчет за год', status: 'draft', date: '10 декабря 2024' },
-    { name: 'Отчет по транспорту', status: 'ready', date: '5 декабря 2024' },
-  ];
+        if (!response.ok) {
+          throw new Error(`Ошибка загрузки: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setDashboardData(data);
+        setError(null);
+      } catch (err) {
+        console.error('Ошибка загрузки данных дашборда:', err);
+        setError(err instanceof Error ? err.message : 'Неизвестная ошибка');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  // Показываем состояние загрузки
+  if (loading) {
+    return (
+      <Layout onNavigate={onNavigate} onLogout={onLogout}>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Загрузка данных дашборда...</p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Показываем ошибку
+  if (error || !dashboardData) {
+    return (
+      <Layout onNavigate={onNavigate} onLogout={onLogout}>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+              <p className="text-red-600 mb-4">Ошибка загрузки данных: {error}</p>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Попробовать снова
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Используем загруженные данные
+  const stats = dashboardData.kpiCards;
+  const recentDocuments = dashboardData.recentDocuments;
+  const recentReports = dashboardData.recentReports;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -148,7 +187,7 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             {stats.map((stat, index) => {
-              const IconComponent = stat.icon;
+              const IconComponent = typeof stat.icon === 'string' ? iconMap[stat.icon] : stat.icon;
               
               return (
                 <motion.div
@@ -305,24 +344,24 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-700">Сбор данных</span>
-                      <span className="text-gray-500">85%</span>
+                      <span className="text-gray-700">{dashboardData.progress296FZ.dataCollection.label}</span>
+                      <span className="text-gray-500">{dashboardData.progress296FZ.dataCollection.percentage}%</span>
                     </div>
-                    <Progress value={85} className="h-2" />
+                    <Progress value={dashboardData.progress296FZ.dataCollection.percentage} className="h-2" />
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-700">Обработка документов</span>
-                      <span className="text-gray-500">72%</span>
+                      <span className="text-gray-700">{dashboardData.progress296FZ.documentProcessing.label}</span>
+                      <span className="text-gray-500">{dashboardData.progress296FZ.documentProcessing.percentage}%</span>
                     </div>
-                    <Progress value={72} className="h-2" />
+                    <Progress value={dashboardData.progress296FZ.documentProcessing.percentage} className="h-2" />
                   </div>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-700">Создание отчетов</span>
-                      <span className="text-gray-500">45%</span>
+                      <span className="text-gray-700">{dashboardData.progress296FZ.reportGeneration.label}</span>
+                      <span className="text-gray-500">{dashboardData.progress296FZ.reportGeneration.percentage}%</span>
                     </div>
-                    <Progress value={45} className="h-2" />
+                    <Progress value={dashboardData.progress296FZ.reportGeneration.percentage} className="h-2" />
                   </div>
                 </div>
               </CardContent>

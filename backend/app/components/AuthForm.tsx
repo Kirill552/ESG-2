@@ -19,6 +19,11 @@ export function AuthForm({ onSuccess, onBack }: AuthFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [authMethod, setAuthMethod] = useState<"email" | "magic" | "vk" | null>(null);
   const [isPasskeyAvailable, setIsPasskeyAvailable] = useState(false);
+  const [passkeyStatus, setPasskeyStatus] = useState<{
+    hasUser: boolean;
+    hasPasskey: boolean;
+    canUsePasskey: boolean;
+  } | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +60,40 @@ export function AuthForm({ onSuccess, onBack }: AuthFormProps) {
 
   useEffect(() => {
     setStatusMessage(null);
+    setPasskeyStatus(null);
+
+    // Проверяем статус Passkey только если email корректный
+    const checkPasskeyStatus = async () => {
+      const trimmedEmail = email.trim().toLowerCase();
+      if (!trimmedEmail || !trimmedEmail.includes('@')) {
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/auth/passkey/status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: trimmedEmail }),
+        });
+
+        const result = await response.json();
+        if (response.ok && result.ok) {
+          setPasskeyStatus({
+            hasUser: result.hasUser,
+            hasPasskey: result.hasPasskey,
+            canUsePasskey: result.canUsePasskey
+          });
+        }
+      } catch (error) {
+        // Игнорируем ошибки проверки статуса
+        console.warn('Failed to check passkey status', error);
+      }
+    };
+
+    const timeoutId = setTimeout(checkPasskeyStatus, 500); // Дебаунс 500мс
+    return () => clearTimeout(timeoutId);
   }, [email]);
 
   const handleMagicLink = async () => {
@@ -315,18 +354,23 @@ export function AuthForm({ onSuccess, onBack }: AuthFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Button 
+              <Button
                 onClick={handlePasskeyAuth}
-                disabled={isLoading || !isPasskeyAvailable || !email.trim()}
+                disabled={isLoading || !isPasskeyAvailable || !email.trim() || (passkeyStatus && !passkeyStatus.canUsePasskey)}
                 variant="outline"
                 className="w-full h-12 relative"
               >
                 <Fingerprint className="w-5 h-5 mr-3" />
-                Passkey
+                {passkeyStatus?.hasPasskey ? 'Войти через Passkey' : 'Настроить Passkey'}
               </Button>
               {!isPasskeyAvailable && (
                 <p className="text-xs text-muted-foreground text-center">
                   Passkey доступен на устройствах с Face ID, Touch ID или Windows Hello.
+                </p>
+              )}
+              {passkeyStatus && !passkeyStatus.hasUser && email.trim() && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Сначала создайте аккаунт через почту, затем настройте Passkey в настройках.
                 </p>
               )}
               {statusMessage && (

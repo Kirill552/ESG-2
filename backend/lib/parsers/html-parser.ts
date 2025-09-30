@@ -1,81 +1,46 @@
 /**
- * Современный HTML парсер (2025) 
- * Использует node-html-parser - самый быстрый HTML парсер для Node.js
+ * HTML парсер для извлечения российских единиц измерения
+ * Использует node-html-parser для обработки HTML документов
  */
 
-import * as fs from 'fs/promises';
 import { parse, HTMLElement } from 'node-html-parser';
-import { htmlToText } from 'html-to-text';
-import * as iconv from 'iconv-lite';
-import { BaseParser, ParsedDocument, ParsedRow, DataQuality } from './base-parser';
-
-export interface HtmlParserOptions {
-  extractText?: boolean;
-  extractTables?: boolean;
-  extractLinks?: boolean;
-  extractMetadata?: boolean;
-  removeScripts?: boolean;
-  preserveFormatting?: boolean;
-  encoding?: string;
-  autoDetectEncoding?: boolean;
-}
+import {
+  BaseParser,
+  ParsedDocumentData,
+  ParseOptions,
+  ParserResult,
+  RussianUnitsHelper
+} from './base-parser';
 
 export class HtmlParser extends BaseParser {
-  private readonly options: Required<HtmlParserOptions>;
+  protected readonly supportedFormats = ['html', 'htm'];
 
-  constructor(options: HtmlParserOptions = {}) {
-    super();
-    this.options = {
-      extractText: options.extractText ?? true,
-      extractTables: options.extractTables ?? true,
-      extractLinks: options.extractLinks ?? false,
-      extractMetadata: options.extractMetadata ?? true,
-      removeScripts: options.removeScripts ?? true,
-      preserveFormatting: options.preserveFormatting ?? false,
-      encoding: options.encoding || 'utf8',
-      autoDetectEncoding: options.autoDetectEncoding ?? true,
-    };
-  }
-
-  async parseFile(filePath: string): Promise<ParsedDocument> {
+  /**
+   * Парсит HTML файл и извлекает российские единицы измерения
+   */
+  async parse(buffer: Buffer, options: ParseOptions = {}): Promise<ParserResult> {
     const startTime = Date.now();
-    
-    try {
-      console.log(`🌐 HTML Parser: обработка файла ${filePath}`);
-      
-      // Читаем файл с определением кодировки
-      const buffer = await fs.readFile(filePath);
-      const encoding = this.detectEncoding(buffer);
-      const content = iconv.decode(buffer, encoding);
-      
-      console.log(`🔤 Определена кодировка: ${encoding}`);
-      
-      // Парсим HTML
-      const result = this.parseHtml(content);
-      
-      const processingTime = Date.now() - startTime;
-      console.log(`✅ HTML Parser: файл обработан за ${processingTime}ms`);
-      
-      return {
-        ...result,
-        metadata: {
-          ...result.metadata,
-          encoding,
-          processingTime,
-          parser: 'HtmlParser'
-        }
-      };
-      
-    } catch (error) {
-      console.error(`❌ HTML Parser: ошибка обработки файла ${filePath}:`, error);
-      throw error;
-    }
-  }
 
-  parseHtml(content: string): ParsedDocument {
     try {
-      // Парсим HTML документ
-      const root = parse(content, {
+      console.log(`🌐 HTML Parser: starting parse (${buffer.length} bytes)`);
+
+      // Определяем кодировку
+      const encoding = options.encoding === 'auto' || !options.encoding
+        ? this.detectEncoding(buffer)
+        : options.encoding;
+
+      console.log(`🔤 HTML Parser: detected encoding ${encoding}`);
+
+      // Конвертируем буфер в текст
+      let htmlContent: string;
+      if (encoding === 'cp1251') {
+        htmlContent = this.convertFromCp1251(buffer);
+      } else {
+        htmlContent = buffer.toString(encoding === 'cp866' ? 'binary' : 'utf8');
+      }
+
+      // Парсим HTML
+      const root = parse(htmlContent, {
         blockTextElements: {
           script: false,
           noscript: false,
@@ -84,273 +49,138 @@ export class HtmlParser extends BaseParser {
         }
       });
 
-      const rows: ParsedRow[] = [];
-      let confidence = 0.7;
+      // Удаляем скрипты и стили
+      root.querySelectorAll('script, style, noscript').forEach(element => {
+        element.remove();
+      });
 
-      // Удаляем скрипты если нужно
-      if (this.options.removeScripts) {
-        this.removeScripts(root);
+      // Извлекаем текст из HTML
+      const textLines = this.extractTextFromHtml(root);
+      console.log(`🌐 HTML Parser: extracted ${textLines.length} text lines`);
+
+      if (textLines.length === 0) {
+        return {
+          success: false,
+          error: 'No text content found in HTML',
+          processingTime: Date.now() - startTime
+        };
       }
 
-      // Извлекаем таблицы
-      if (this.options.extractTables) {
-        const tableRows = this.extractTables(root);
-        rows.push(...tableRows);
-        if (tableRows.length > 0) {
-          confidence = Math.max(confidence, 0.9);
-        }
-      }
+      // Извлекаем данные по российским единицам
+      const extractedUnitsData = this.extractRussianUnitsData(textLines);
 
-      // Извлекаем текстовое содержимое
-      if (this.options.extractText) {
-        const textRows = this.extractTextContent(root);
-        rows.push(...textRows);
-      }
+      // Оцениваем качество данных
+      const dataQuality = RussianUnitsHelper.assessDataQuality(
+        extractedUnitsData.russian_units_found,
+        textLines.length
+      );
 
-      // Извлекаем ссылки
-      if (this.options.extractLinks) {
-        const linkRows = this.extractLinks(root);
-        rows.push(...linkRows);
-      }
+      const confidence = this.calculateConfidence(
+        extractedUnitsData,
+        textLines.length,
+        dataQuality
+      );
 
-      // Извлекаем метаданные
-      let metadata: any = { format: 'html' };
-      if (this.options.extractMetadata) {
-        metadata = { ...metadata, ...this.extractMetadata(root) };
-        confidence = Math.max(confidence, 0.8);
-      }
-
-      const quality = this.assessDataQuality(rows, confidence);
-      
-      return {
-        success: true,
-        data: rows,
+      const result: ParsedDocumentData = {
+        documentType: 'txt', // HTML рассматриваем как текстовый документ
+        confidence,
+        extractedData: {
+          ...extractedUnitsData,
+          raw_rows: options.maxRows ? textLines.slice(0, options.maxRows) : textLines,
+          total_rows: textLines.length
+        },
         metadata: {
-          ...metadata,
-          totalElements: rows.length,
-          quality: quality.quality,
-          confidence: quality.confidence,
-          extractedTypes: this.getExtractedTypes(rows)
+          encoding,
+          format_detected: 'HTML',
+          processing_time_ms: Date.now() - startTime,
+          russian_units_found: extractedUnitsData.russian_units_found,
+          data_quality: dataQuality
         }
       };
-      
+
+      console.log(`✅ HTML Parser: success! Found ${extractedUnitsData.russian_units_found.length} units, quality: ${dataQuality}`);
+
+      return {
+        success: true,
+        data: result,
+        processingTime: Date.now() - startTime
+      };
+
     } catch (error) {
-      console.error('❌ HTML Parser: ошибка парсинга HTML:', error);
-      throw error;
+      console.error('❌ HTML Parser failed:', error);
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        processingTime: Date.now() - startTime
+      };
     }
   }
 
   /**
-   * Удаляет скрипты и стили из документа
+   * Извлекает текст из HTML элементов
    */
-  private removeScripts(root: HTMLElement): void {
-    root.querySelectorAll('script, style, noscript').forEach(element => {
-      element.remove();
-    });
-  }
+  private extractTextFromHtml(root: HTMLElement): string[] {
+    const textLines: string[] = [];
 
-  /**
-   * Извлекает данные из таблиц
-   */
-  private extractTables(root: HTMLElement): ParsedRow[] {
-    const rows: ParsedRow[] = [];
+    // Извлекаем текст из таблиц (приоритет)
     const tables = root.querySelectorAll('table');
-    
-    tables.forEach((table, tableIndex) => {
-      const tableRows = table.querySelectorAll('tr');
-      
-      tableRows.forEach((row, rowIndex) => {
+    tables.forEach(table => {
+      const rows = table.querySelectorAll('tr');
+      rows.forEach(row => {
         const cells = row.querySelectorAll('td, th');
-        const cellData: string[] = [];
-        
+        const cellTexts: string[] = [];
         cells.forEach(cell => {
           const text = this.cleanText(cell.text);
-          if (text) {
-            cellData.push(text);
-          }
+          if (text) cellTexts.push(text);
         });
-        
-        if (cellData.length > 0) {
-          const rowText = cellData.join(' ');
-          const extractedData = this.extractDataFromText(rowText);
-          
-          if (extractedData.hasData || cellData.length > 1) {
-            rows.push({
-              index: rows.length + 1,
-              content: rowText,
-              extractedData: extractedData.data,
-              confidence: extractedData.hasData ? extractedData.confidence : 0.5,
-              metadata: {
-                source: 'table',
-                tableIndex,
-                rowIndex,
-                cellCount: cellData.length
-              }
-            });
-          }
+        if (cellTexts.length > 0) {
+          textLines.push(cellTexts.join(' | '));
         }
       });
     });
-    
-    return rows;
+
+    // Удаляем таблицы чтобы не дублировать текст
+    tables.forEach(table => table.remove());
+
+    // Извлекаем остальной текст
+    const textContent = root.text;
+    const lines = textContent
+      .split(/\n+/)
+      .map(line => this.cleanText(line))
+      .filter(line => line.length > 5); // Игнорируем слишком короткие строки
+
+    textLines.push(...lines);
+
+    return textLines;
   }
 
   /**
-   * Извлекает текстовое содержимое
+   * Рассчитывает уверенность парсинга HTML
    */
-  private extractTextContent(root: HTMLElement): ParsedRow[] {
-    const rows: ParsedRow[] = [];
-    
-    // Конвертируем HTML в чистый текст
-    let textContent: string;
-    
-    if (this.options.preserveFormatting) {
-      textContent = htmlToText(root.toString(), {
-        wordwrap: false,
-        preserveNewlines: true,
-        singleNewLineParagraphs: true,
-      });
-    } else {
-      textContent = root.text;
-    }
-    
-    // Разбиваем на строки и обрабатываем
-    const lines = textContent.split('\n').filter(line => line.trim());
-    
-    lines.forEach((line, index) => {
-      const cleanLine = this.cleanText(line);
-      if (cleanLine.length > 10) { // Игнорируем слишком короткие строки
-        const extractedData = this.extractDataFromText(cleanLine);
-        
-        if (extractedData.hasData) {
-          rows.push({
-            index: rows.length + 1,
-            content: cleanLine,
-            extractedData: extractedData.data,
-            confidence: extractedData.confidence,
-            metadata: {
-              source: 'text',
-              lineIndex: index
-            }
-          });
-        }
-      }
-    });
-    
-    return rows;
-  }
+  private calculateConfidence(
+    extractedData: any,
+    totalRows: number,
+    dataQuality: 'high' | 'medium' | 'low'
+  ): number {
+    let confidence = 0.5; // Базовая уверенность для HTML
 
-  /**
-   * Извлекает ссылки
-   */
-  private extractLinks(root: HTMLElement): ParsedRow[] {
-    const rows: ParsedRow[] = [];
-    const links = root.querySelectorAll('a[href]');
-    
-    links.forEach((link, index) => {
-      const text = this.cleanText(link.text);
-      const href = link.getAttribute('href');
-      
-      if (text && href) {
-        const extractedData = this.extractDataFromText(text);
-        
-        rows.push({
-          index: rows.length + 1,
-          content: text,
-          extractedData: extractedData.data,
-          confidence: extractedData.hasData ? extractedData.confidence : 0.3,
-          metadata: {
-            source: 'link',
-            href,
-            linkIndex: index
-          }
-        });
-      }
-    });
-    
-    return rows;
-  }
-
-  /**
-   * Извлекает метаданные документа
-   */
-  private extractMetadata(root: HTMLElement): any {
-    const metadata: any = {};
-    
-    // Заголовок документа
-    const title = root.querySelector('title');
-    if (title) {
-      metadata.title = this.cleanText(title.text);
-    }
-    
-    // Meta теги
-    const metaTags = root.querySelectorAll('meta');
-    metaTags.forEach(meta => {
-      const name = meta.getAttribute('name') || meta.getAttribute('property');
-      const content = meta.getAttribute('content');
-      
-      if (name && content) {
-        metadata[name] = content;
-      }
-    });
-    
-    // Заголовки h1-h6
-    const headings: string[] = [];
-    for (let i = 1; i <= 6; i++) {
-      const levelHeadings = root.querySelectorAll(`h${i}`);
-      levelHeadings.forEach(heading => {
-        const text = this.cleanText(heading.text);
-        if (text) {
-          headings.push(text);
-        }
-      });
-    }
-    
-    if (headings.length > 0) {
-      metadata.headings = headings;
-    }
-    
-    return metadata;
-  }
-
-  /**
-   * Извлекает данные из текста
-   */
-  private extractDataFromText(text: string): {
-    hasData: boolean;
-    data: any;
-    confidence: number;
-  } {
-    const patterns = this.getEnergyPatterns();
-    const extracted: any = {};
-    let confidence = 0;
-    let hasData = false;
-
-    for (const [category, categoryPatterns] of Object.entries(patterns)) {
-      for (const pattern of categoryPatterns) {
-        const matches = text.match(pattern.regex);
-        if (matches) {
-          if (!extracted[category]) {
-            extracted[category] = [];
-          }
-          
-          const value = this.extractValue(matches, pattern);
-          if (value) {
-            extracted[category].push({
-              value: value.amount,
-              unit: value.unit,
-              text: matches[0],
-              confidence: pattern.confidence
-            });
-            
-            confidence = Math.max(confidence, pattern.confidence);
-            hasData = true;
-          }
-        }
-      }
+    // Бонус за качество данных
+    switch (dataQuality) {
+      case 'high': confidence += 0.3; break;
+      case 'medium': confidence += 0.2; break;
+      case 'low': confidence += 0.1; break;
     }
 
-    return { hasData, data: extracted, confidence };
+    // Бонус за найденные единицы
+    const unitsCount = extractedData.russian_units_found.length;
+    confidence += Math.min(unitsCount * 0.02, 0.2);
+
+    // Бонус за количество строк
+    if (totalRows > 20) confidence += 0.1;
+    if (totalRows > 100) confidence += 0.1;
+
+    return Math.min(confidence, 0.9);
   }
 
   /**
@@ -364,132 +194,56 @@ export class HtmlParser extends BaseParser {
   }
 
   /**
-   * Определяет кодировку файла
+   * Конвертирует буфер из CP1251 в UTF-8
    */
-  private detectEncoding(buffer: Buffer): string {
-    if (!this.options.autoDetectEncoding) {
-      return this.options.encoding;
-    }
-
-    // Ищем charset в HTML
-    const htmlStart = buffer.subarray(0, Math.min(buffer.length, 2048)).toString('ascii');
-    const charsetMatch = htmlStart.match(/charset\s*=\s*["']?([^"'>\s]+)/i);
-    
-    if (charsetMatch) {
-      const charset = charsetMatch[1].toLowerCase();
-      if (iconv.encodingExists(charset)) {
-        return charset;
-      }
-    }
-
-    // Проверяем BOM
-    if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
-      return 'utf8';
-    }
-
-    // По умолчанию UTF-8
-    return 'utf8';
-  }
-
-  /**
-   * Получает паттерны для поиска энергетических данных
-   */
-  private getEnergyPatterns() {
-    return {
-      electricity: [
-        {
-          regex: /(\d+(?:[.,]\d+)?)\s*(?:кВт[·\*]?ч|kwh|кватт?[-\s]?час)/gi,
-          confidence: 0.9,
-          unit: 'кВт·ч'
-        },
-        {
-          regex: /электроэнергия[:\s]*(\d+(?:[.,]\d+)?)/gi,
-          confidence: 0.8,
-          unit: 'кВт·ч'
-        }
-      ],
-      gas: [
-        {
-          regex: /(\d+(?:[.,]\d+)?)\s*(?:м[3³]|куб\.?\s*м|кубометр)/gi,
-          confidence: 0.9,
-          unit: 'м³'
-        },
-        {
-          regex: /газ[:\s]*(\d+(?:[.,]\d+)?)/gi,
-          confidence: 0.8,
-          unit: 'м³'
-        }
-      ],
-      fuel: [
-        {
-          regex: /(\d+(?:[.,]\d+)?)\s*(?:л|лит|литр)/gi,
-          confidence: 0.9,
-          unit: 'л'
-        },
-        {
-          regex: /(?:бензин|дизель|топливо)[:\s]*(\d+(?:[.,]\d+)?)/gi,
-          confidence: 0.8,
-          unit: 'л'
-        }
-      ],
-      heat: [
-        {
-          regex: /(\d+(?:[.,]\d+)?)\s*(?:гкал|ГКал|гигакалори)/gi,
-          confidence: 0.9,
-          unit: 'Гкал'
-        }
-      ],
-      transport: [
-        {
-          regex: /(\d+(?:[.,]\d+)?)\s*(?:км|километр)/gi,
-          confidence: 0.9,
-          unit: 'км'
-        }
-      ]
+  private convertFromCp1251(buffer: Buffer): string {
+    // Простая реализация для основных русских символов
+    const cp1251Map: { [key: number]: string } = {
+      192: 'А', 193: 'Б', 194: 'В', 195: 'Г', 196: 'Д', 197: 'Е', 198: 'Ж', 199: 'З',
+      200: 'И', 201: 'Й', 202: 'К', 203: 'Л', 204: 'М', 205: 'Н', 206: 'О', 207: 'П',
+      208: 'Р', 209: 'С', 210: 'Т', 211: 'У', 212: 'Ф', 213: 'Х', 214: 'Ц', 215: 'Ч',
+      216: 'Ш', 217: 'Щ', 218: 'Ъ', 219: 'Ы', 220: 'Ь', 221: 'Э', 222: 'Ю', 223: 'Я',
+      224: 'а', 225: 'б', 226: 'в', 227: 'г', 228: 'д', 229: 'е', 230: 'ж', 231: 'з',
+      232: 'и', 233: 'й', 234: 'к', 235: 'л', 236: 'м', 237: 'н', 238: 'о', 239: 'п',
+      240: 'р', 241: 'с', 242: 'т', 243: 'у', 244: 'ф', 245: 'х', 246: 'ц', 247: 'ч',
+      248: 'ш', 249: 'щ', 250: 'ъ', 251: 'ы', 252: 'ь', 253: 'э', 254: 'ю', 255: 'я',
+      168: 'Ё', 184: 'ё'
     };
-  }
 
-  /**
-   * Оценивает качество извлеченных данных
-   */
-  private assessDataQuality(rows: ParsedRow[], baseConfidence: number): {
-    quality: DataQuality;
-    confidence: number;
-  } {
-    if (rows.length === 0) {
-      return { quality: 'poor', confidence: 0 };
-    }
-
-    const avgConfidence = rows.reduce((sum, row) => sum + row.confidence, 0) / rows.length;
-    const finalConfidence = (avgConfidence + baseConfidence) / 2;
-    
-    let quality: DataQuality;
-    
-    if (finalConfidence > 0.8 && rows.length > 5) {
-      quality = 'excellent';
-    } else if (finalConfidence > 0.6 && rows.length > 2) {
-      quality = 'good';
-    } else if (finalConfidence > 0.4 || rows.length > 0) {
-      quality = 'fair';
-    } else {
-      quality = 'poor';
-    }
-
-    return { quality, confidence: finalConfidence };
-  }
-
-  /**
-   * Получает типы извлеченных данных
-   */
-  private getExtractedTypes(rows: ParsedRow[]): string[] {
-    const types = new Set<string>();
-    
-    for (const row of rows) {
-      if (row.extractedData) {
-        Object.keys(row.extractedData).forEach(key => types.add(key));
+    let result = '';
+    for (let i = 0; i < buffer.length; i++) {
+      const byte = buffer[i];
+      if (cp1251Map[byte]) {
+        result += cp1251Map[byte];
+      } else {
+        result += String.fromCharCode(byte);
       }
     }
-    
-    return Array.from(types);
+
+    return result;
+  }
+
+  /**
+   * Проверяет, является ли файл HTML форматом
+   */
+  canParse(filename: string, mimeType?: string): boolean {
+    const extension = filename.toLowerCase().split('.').pop();
+
+    if (extension && this.supportedFormats.includes(extension)) {
+      return true;
+    }
+
+    // Дополнительная проверка по MIME типу
+    if (mimeType) {
+      const htmlMimeTypes = [
+        'text/html',
+        'application/xhtml+xml',
+        'text/xhtml'
+      ];
+
+      return htmlMimeTypes.includes(mimeType);
+    }
+
+    return false;
   }
 }

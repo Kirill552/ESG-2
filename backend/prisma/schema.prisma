@@ -20,6 +20,13 @@ enum WebAuthnChallengeType {
   AUTHENTICATION
 }
 
+enum UserMode {
+  DEMO
+  TRIAL
+  PAID
+  EXPIRED
+}
+
 model User {
   id                      String               @id @default(cuid())
   email                   String               @unique
@@ -38,6 +45,7 @@ model User {
   createdAt               DateTime             @default(now())
   updatedAt               DateTime             @updatedAt
   planType                PlanType             @default(TRIAL)
+  mode                    UserMode             @default(DEMO)
   totpSecret              String?
   // Активная организация пользователя
   activeOrganizationId    String?
@@ -50,13 +58,35 @@ model User {
   activeOrganization      Organization?        @relation("UserActiveOrganization", fields: [activeOrganizationId], references: [id])
   accounts                Account[]
   sessions                Session[]
+  trialRequests           TrialRequest[]
   backupCodes             BackupCode[]
   webAuthnCredentials     WebAuthnCredential[]
   webAuthnChallenges      WebAuthnChallenge[]
   notifications           Notification[]
+  notificationPreferences NotificationPreferences? @relation("UserNotificationPreferences")
   magicLinkTokens         MagicLinkToken[]
+  userProfile             UserProfile?
+  documentBatches         DocumentBatch[]
 
   @@map("users")
+}
+
+model UserProfile {
+  id       String  @id @default(cuid())
+  userId   String  @unique
+  position String? // Должность
+  bio      String? // Биография/описание
+  avatar   String? // URL аватара
+  timezone String? @default("Europe/Moscow") // Часовой пояс
+  language String? @default("ru") // Язык интерфейса
+  theme    String? @default("light") // Тема оформления
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
 }
 
 // WebAuthn Passkeys модель для биометрической аутентификации
@@ -77,6 +107,29 @@ model WebAuthnCredential {
   @@map("webauthn_credentials")
 }
 
+/// Batch загрузка документов для группировки уведомлений
+model DocumentBatch {
+  id            String   @id @default(cuid())
+  userId        String
+  totalCount    Int      // Общее количество документов в batch
+  processedCount Int     @default(0) // Обработано успешно
+  failedCount   Int      @default(0) // Обработано с ошибками
+  pendingCount  Int      // Ожидают обработки (totalCount - processedCount - failedCount)
+
+  notificationSent Boolean @default(false) // Отправлено ли итоговое уведомление
+
+  createdAt     DateTime @default(now())
+  completedAt   DateTime? // Когда все документы обработаны
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents     Document[]
+
+  @@index([userId])
+  @@index([userId, notificationSent])
+  @@index([completedAt])
+  @@map("document_batches")
+}
+
 model Document {
   id                    String         @id @default(cuid())
   userId                String
@@ -87,6 +140,7 @@ model Document {
   fileType              String
   fileHash              String? // sha256 хеш содержимого файла для дедупликации
   status                DocumentStatus @default(UPLOADED)
+  category              DocumentCategory @default(OTHER)
   ocrProcessed          Boolean        @default(false)
   ocrData               Json?
   ocrConfidence         Float?
@@ -95,11 +149,16 @@ model Document {
   processingProgress    Int?           @default(0)
   processingStage       String?
   processingMessage     String?
+  errorDetails          Json?          // Детальная информация об ошибке обработки
+  errorType             String?        // Тип ошибки: CORRUPTED_FILE, UNSUPPORTED_FORMAT, SIZE_LIMIT, OCR_ERROR, SERVICE_ERROR, TIMEOUT
+  retryCount            Int?           @default(0) // Количество попыток переобработки
   jobId                 String?
   processingCompletedAt DateTime?
   processingStartedAt   DateTime?
   queueStatus           QueueStatus?
+  batchId               String?        // ID batch загрузки для группировки уведомлений
   user                  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch                 DocumentBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
   reports               Report[]
 
   @@index([processingStage])
@@ -107,9 +166,12 @@ model Document {
   @@index([queueStatus])
   @@index([userId, queueStatus])
   @@index([userId, status])
+  @@index([userId, category])
+  @@index([status, category])
   @@index([queueStatus, processingStartedAt])
   @@index([processingCompletedAt])
   @@index([fileHash])
+  @@index([batchId])
   @@index([createdAt])
   @@index([updatedAt])
   @@map("documents")
@@ -119,11 +181,17 @@ model Report {
   id                String             @id @default(cuid())
   userId            String
   documentId        String?
+  name              String             // Название отчета (например, "Годовой отчет о выбросах ПГ 2024")
   reportType        ReportType
   format            String
   fileName          String
   filePath          String
   fileSize          Int?
+  status            ReportStatus       @default(DRAFT) // draft, ready, submitted, approved
+  period            String?            // Отчетный период (например, "2024", "Q1 2025")
+  submissionDeadline DateTime?         // Дедлайн подачи
+  totalEmissions    Float?             // Общие выбросы в тСО₂
+  documentCount     Int                @default(0) // Количество связанных документов
   emissionData      Json
   methodology       String             @default("296-ФЗ от 02.07.2021")
   downloadCount     Int                @default(0)
@@ -142,6 +210,9 @@ model Report {
   document          Document?          @relation(fields: [documentId], references: [id], onDelete: Cascade)
   user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId, status])
+  @@index([submissionDeadline])
+  @@index([status])
   @@map("reports")
 }
 
@@ -182,6 +253,32 @@ model Payment {
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("payments")
+}
+
+model TrialRequest {
+  id            String               @id @default(cuid())
+  userId        String
+  userEmail     String
+  userName      String
+  companyName   String
+  position      String
+  phone         String?
+  message       String
+  requestType   TrialRequestType     @default(TRIAL)
+  status        TrialRequestStatus   @default(PENDING)
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  processedAt   DateTime?
+  processedBy   String?
+  adminNotes    String?
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("trial_requests")
 }
 
 model AuditLog {
@@ -433,7 +530,13 @@ model Organization {
   profile     OrganizationProfile?
   users       OrganizationUser[]
   invitations OrganizationInvitation[]
+  contacts    OrganizationContact[]
   activeUsers User[]                   @relation("UserActiveOrganization")
+
+  // Аналитические данные
+  analyticsEvents   AnalyticsEvent[]
+  reportingSummary  ReportingSummary[]
+  dashboardCache    DashboardCache?
 
   @@map("organizations")
 }
@@ -448,6 +551,9 @@ enum OrganizationRoleEnum {
   ACCOUNTANT
   ECOLOGIST
   VIEWER
+  MAIN
+  MANAGER
+  OTHER
 }
 
 model OrganizationProfile {
@@ -506,6 +612,25 @@ model OrganizationInvitation {
 
   @@index([organizationId, email])
   @@map("organization_invitations")
+}
+
+model OrganizationContact {
+  id             String               @id @default(cuid())
+  organizationId String
+  name           String
+  email          String
+  phone          String?
+  position       String?
+  role           OrganizationRoleEnum @default(OTHER)
+  isPrimary      Boolean              @default(false)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@index([isPrimary])
+  @@map("organization_contacts")
 }
 
 // удалены organization_credits и organization_credit_transactions
@@ -639,13 +764,22 @@ model EmissionOveragePayment {
 }
 
 enum DocumentStatus {
-  UPLOADED
-  PROCESSING
-  PROCESSED
-  FAILED
+  UPLOADED    // Загружен
+  PROCESSING  // В обработке
+  PROCESSED   // Обработан
+  FAILED      // Ошибка
   ARCHIVED
   QUEUED
   QUARANTINE
+}
+
+enum DocumentCategory {
+  PRODUCTION  // Производство
+  SUPPLIERS   // Поставщики
+  WASTE       // Отходы
+  TRANSPORT   // Транспорт
+  ENERGY      // Энергия
+  OTHER       // Другое
 }
 
 enum ReportType {
@@ -653,6 +787,13 @@ enum ReportType {
   CBAM_XML
   CBAM_CSV
   CARBON_FOOTPRINT
+}
+
+enum ReportStatus {
+  DRAFT      // Черновик
+  READY      // Готов
+  // SUBMITTED  // Отправлен - TODO: для будущих улучшений (отправка в регулятор)
+  // APPROVED   // Утвержден - TODO: для будущих улучшений (подтверждение от регулятора)
 }
 
 enum PlanType {
@@ -850,6 +991,19 @@ enum InvoiceStatus {
   EXPIRED
 }
 
+enum TrialRequestType {
+  TRIAL
+  DEMO_EXTEND
+  FULL_ACCESS
+}
+
+enum TrialRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PROCESSING
+}
+
 /// События для простого rate limiting по ключу (IP+идентификатор)
 model RateLimitEvent {
   id        String   @id @default(cuid())
@@ -959,4 +1113,106 @@ model Notification {
   @@index([type])
   @@index([createdAt])
   @@map("notifications")
+}
+
+/// Настройки уведомлений пользователя
+model NotificationPreferences {
+  id       String @id @default(cuid())
+  userId   String @unique
+
+  // Каналы доставки
+  emailEnabled Boolean @default(true) // Email уведомления
+  pushEnabled  Boolean @default(false) // Push уведомления в браузере
+
+  // Типы уведомлений
+  reportsEnabled   Boolean @default(true) // Готовность отчетов
+  deadlinesEnabled Boolean @default(true) // Приближение дедлайнов
+  documentsEnabled Boolean @default(false) // Обработка документов
+
+  // Настройки дедлайнов (за сколько дней уведомлять)
+  deadlineDays Int[] @default([30, 7, 1])
+
+  // Дополнительные настройки (опционально)
+  quietHoursStart Int? // Начало тихих часов (0-23)
+  quietHoursEnd   Int? // Конец тихих часов (0-23)
+  timezone        String @default("Europe/Moscow")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation("UserNotificationPreferences", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+// === АНАЛИТИКА И АГРЕГАЦИЯ ДАННЫХ ===
+
+/// События для трекинга аналитики
+model AnalyticsEvent {
+  id             String    @id @default(cuid())
+  organizationId String
+  eventType      String    // document_uploaded, report_generated, emission_calculated, etc.
+  eventData      Json      // данные события
+  userId         String?
+  timestamp      DateTime  @default(now())
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([eventType])
+  @@index([timestamp])
+  @@index([organizationId, eventType])
+  @@map("analytics_events")
+}
+
+/// Агрегированные данные по периодам для быстрой загрузки
+model ReportingSummary {
+  id                String       @id @default(cuid())
+  organizationId    String
+  period            String       // "2024", "2024-Q1", "2024-01", etc.
+  periodType        String       // "year", "quarter", "month"
+  totalEmissions    Float        @default(0)
+  scope1Emissions   Float        @default(0)
+  scope2Emissions   Float        @default(0)
+  scope3Emissions   Float        @default(0)
+  documentsCount    Int          @default(0)
+  reportsCount      Int          @default(0)
+  processedCount    Int          @default(0)
+  complianceScore   Float        @default(0)
+  dataQuality       Float        @default(0)
+  emissionsSources  Json?        // агрегация по категориям
+  trends            Json?        // тренды и изменения
+  calculatedAt      DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, period, periodType])
+  @@index([organizationId])
+  @@index([period])
+  @@index([periodType])
+  @@index([calculatedAt])
+  @@map("reporting_summary")
+}
+
+/// Кэш данных дашборда для быстрой загрузки
+model DashboardCache {
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  kpiData        Json         // KPI карточки
+  recentData     Json         // последние документы/отчеты
+  progressData   Json         // прогресс 296-ФЗ
+  complianceData Json?        // статус соответствия
+  analyticsData  Json?        // аналитические данные
+  cachedAt       DateTime     @default(now())
+  expiresAt      DateTime     // время истечения кэша
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([expiresAt])
+  @@map("dashboard_cache")
 }

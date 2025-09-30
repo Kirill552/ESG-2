@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Layout } from './Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -9,19 +9,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
-import { 
-  User, 
-  Building, 
-  Bell, 
-  Shield, 
-  Key, 
-  Mail, 
-  Globe, 
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { startRegistration } from '@simplewebauthn/browser';
+import {
+  User,
+  Building,
+  Bell,
+  Shield,
+  Key,
+  Mail,
+  Globe,
   Smartphone,
   Fingerprint,
   Download,
   Upload,
-  Trash2
+  Trash2,
+  AlertCircle,
+  CheckCircle,
+  Plus,
+  Loader2
 } from 'lucide-react';
 
 type Page = 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
@@ -32,6 +38,40 @@ interface SettingsProps {
 }
 
 export function Settings({ onNavigate, onLogout }: SettingsProps) {
+  // Состояния для форм
+  const [profileData, setProfileData] = useState({
+    firstName: 'Иван',
+    lastName: 'Петров',
+    email: 'ivan.petrov@company.ru',
+    phone: '+7 (999) 123-45-67',
+    position: 'Эколог'
+  });
+
+  const [organizationData, setOrganizationData] = useState({
+    name: 'ООО «ЭкоТех»',
+    inn: '7700123456',
+    kpp: '770001001',
+    address: '123456, г. Москва, ул. Примерная, д. 1',
+    industry: 'manufacturing'
+  });
+
+  const [contacts, setContacts] = useState([
+    {
+      id: 'demo-contact-1',
+      name: 'Иван Петров',
+      position: 'Главный эколог',
+      email: 'ivan.petrov@company.ru',
+      isPrimary: true
+    }
+  ]);
+
+  const [loading, setLoading] = useState({
+    profile: false,
+    organization: false,
+    contacts: false,
+    notifications: false
+  });
+
   const [notifications, setNotifications] = useState({
     email: true,
     push: false,
@@ -40,11 +80,496 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
     documents: false
   });
 
+  const [notificationSettings, setNotificationSettings] = useState({
+    deadlineDays: [30, 7, 1],
+    quietHoursStart: null as number | null,
+    quietHoursEnd: null as number | null,
+    timezone: 'Europe/Moscow'
+  });
+
+  const [notificationsSaveSuccess, setNotificationsSaveSuccess] = useState(false);
+
   const [security, setSecurity] = useState({
     twoFactor: false,
-    passkey: true,
+    passkey: false,
     sessionTimeout: '30'
   });
+
+  const [contactDialog, setContactDialog] = useState({
+    isOpen: false,
+    isLoading: false,
+    error: null as string | null
+  });
+
+  // Загружаем текущее состояние Passkey
+  React.useEffect(() => {
+    const checkPasskeyStatus = async () => {
+      try {
+        const response = await fetch('/api/auth/passkey/status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: 'whirpy@yandex.ru' }),
+        });
+
+        const result = await response.json();
+        if (response.ok && result.ok && result.hasPasskey) {
+          setSecurity(prev => ({ ...prev, passkey: true }));
+        }
+      } catch (error) {
+        console.warn('Failed to check passkey status', error);
+      }
+    };
+
+    checkPasskeyStatus();
+  }, []);
+
+  // Загружаем настройки уведомлений при монтировании
+  useEffect(() => {
+    const loadNotificationPreferences = async () => {
+      setLoading(prev => ({ ...prev, notifications: true }));
+      try {
+        const response = await fetch('/api/settings/notifications');
+
+        if (response.ok) {
+          const data = await response.json();
+
+          // Обновляем состояние каналов доставки и типов уведомлений
+          setNotifications({
+            email: data.emailEnabled,
+            push: data.pushEnabled,
+            reports: data.reportsEnabled,
+            deadlines: data.deadlinesEnabled,
+            documents: data.documentsEnabled
+          });
+
+          // Обновляем дополнительные настройки
+          setNotificationSettings({
+            deadlineDays: data.deadlineDays || [30, 7, 1],
+            quietHoursStart: data.quietHoursStart,
+            quietHoursEnd: data.quietHoursEnd,
+            timezone: data.timezone || 'Europe/Moscow'
+          });
+        } else {
+          console.error('Ошибка загрузки настроек уведомлений');
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке настроек уведомлений:', error);
+      } finally {
+        setLoading(prev => ({ ...prev, notifications: false }));
+      }
+    };
+
+    loadNotificationPreferences();
+  }, []);
+
+  const [passkeyDialog, setPasskeyDialog] = useState({
+    isOpen: false,
+    isLoading: false,
+    error: null as string | null,
+    success: false
+  });
+
+  const handlePasskeyToggle = async (checked: boolean) => {
+    if (checked && !security.passkey) {
+      // Включаем Passkey - показываем модальное окно для регистрации
+      setPasskeyDialog({ isOpen: true, isLoading: false, error: null, success: false });
+    } else if (!checked && security.passkey) {
+      // Выключаем Passkey - удаляем все Passkey у пользователя
+      try {
+        const response = await fetch('/api/auth/passkey/remove', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ email: 'whirpy@yandex.ru' }),
+        });
+
+        if (response.ok) {
+          setSecurity(prev => ({ ...prev, passkey: false }));
+        } else {
+          console.error('Failed to remove passkey');
+        }
+      } catch (error) {
+        console.error('Error removing passkey', error);
+      }
+    }
+  };
+
+  const setupPasskey = async () => {
+    setPasskeyDialog(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      // Получаем опции для регистрации Passkey
+      const response = await fetch('/api/auth/passkey/register/options', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'whirpy@yandex.ru' // В реальном приложении получать из сессии
+        }),
+      });
+
+      const options = await response.json();
+
+      if (!response.ok) {
+        throw new Error(options.message || 'Не удалось получить опции для регистрации');
+      }
+
+      // Запускаем процесс регистрации Passkey
+      const registration = await startRegistration(options.options);
+
+      // Подтверждаем регистрацию на сервере
+      const verifyResponse = await fetch('/api/auth/passkey/register/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'whirpy@yandex.ru',
+          response: registration,
+        }),
+      });
+
+      const verifyResult = await verifyResponse.json();
+
+      if (!verifyResponse.ok) {
+        throw new Error(verifyResult.message || 'Не удалось подтвердить регистрацию');
+      }
+
+      // Успешно настроили Passkey
+      setSecurity(prev => ({ ...prev, passkey: true }));
+      setPasskeyDialog({ isOpen: false, isLoading: false, error: null, success: true });
+
+      // Показываем уведомление об успехе
+      setTimeout(() => {
+        setPasskeyDialog(prev => ({ ...prev, success: false }));
+      }, 3000);
+
+    } catch (error: any) {
+      console.error('Ошибка настройки Passkey:', error);
+      setPasskeyDialog(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error.message || 'Не удалось настроить Passkey'
+      }));
+    }
+  };
+
+  const closePasskeyDialog = () => {
+    setPasskeyDialog({ isOpen: false, isLoading: false, error: null, success: false });
+  };
+
+  // Функция сохранения профиля
+  const saveProfile = async () => {
+    setLoading(prev => ({ ...prev, profile: true }));
+    try {
+      const response = await fetch('/api/settings/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(profileData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.ok) {
+        // Показать уведомление об успехе
+        console.log('Профиль сохранен успешно');
+      } else {
+        console.error('Ошибка сохранения профиля:', result.message);
+      }
+    } catch (error) {
+      console.error('Ошибка при сохранении профиля:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, profile: false }));
+    }
+  };
+
+  // Функция сохранения организации
+  const saveOrganization = async () => {
+    setLoading(prev => ({ ...prev, organization: true }));
+    try {
+      const response = await fetch('/api/settings/organization', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(organizationData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.ok) {
+        // Показать уведомление об успехе
+        console.log('Данные организации сохранены успешно');
+      } else {
+        console.error('Ошибка сохранения организации:', result.message);
+      }
+    } catch (error) {
+      console.error('Ошибка при сохранении организации:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, organization: false }));
+    }
+  };
+
+  // Функция сохранения настроек уведомлений
+  const saveNotifications = async () => {
+    setLoading(prev => ({ ...prev, notifications: true }));
+    setNotificationsSaveSuccess(false);
+
+    try {
+      const response = await fetch('/api/settings/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          emailEnabled: notifications.email,
+          pushEnabled: notifications.push,
+          reportsEnabled: notifications.reports,
+          deadlinesEnabled: notifications.deadlines,
+          documentsEnabled: notifications.documents,
+          deadlineDays: notificationSettings.deadlineDays,
+          quietHoursStart: notificationSettings.quietHoursStart,
+          quietHoursEnd: notificationSettings.quietHoursEnd,
+          timezone: notificationSettings.timezone
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        // Показываем уведомление об успехе
+        setNotificationsSaveSuccess(true);
+
+        // Скрываем уведомление через 3 секунды
+        setTimeout(() => {
+          setNotificationsSaveSuccess(false);
+        }, 3000);
+      } else {
+        console.error('Ошибка сохранения настроек уведомлений:', result.error);
+      }
+    } catch (error) {
+      console.error('Ошибка при сохранении настроек уведомлений:', error);
+    } finally {
+      setLoading(prev => ({ ...prev, notifications: false }));
+    }
+  };
+
+  // Функция открытия диалога добавления контакта
+  const openAddContactDialog = () => {
+    setContactDialog({ isOpen: true, isLoading: false, error: null });
+  };
+
+  const closeContactDialog = () => {
+    setContactDialog({ isOpen: false, isLoading: false, error: null });
+  };
+
+  // ========== ЭКСПОРТ, ИМПОРТ И УДАЛЕНИЕ ==========
+
+  const [exportLoading, setExportLoading] = useState({
+    reports: false,
+    documents: false,
+    profile: false,
+    full: false,
+  });
+
+  const handleExportReports = async () => {
+    setExportLoading(prev => ({ ...prev, reports: true }));
+    try {
+      const response = await fetch('/api/settings/data/export/reports');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Ошибка экспорта отчётов');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ESG_Reports_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Ошибка экспорта отчётов:', error);
+      alert(error instanceof Error ? error.message : 'Ошибка экспорта отчётов');
+    } finally {
+      setExportLoading(prev => ({ ...prev, reports: false }));
+    }
+  };
+
+  const handleExportDocuments = async () => {
+    setExportLoading(prev => ({ ...prev, documents: true }));
+    try {
+      const response = await fetch('/api/settings/data/export/documents');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Ошибка экспорта документов');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ESG_Documents_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Ошибка экспорта документов:', error);
+      alert(error instanceof Error ? error.message : 'Ошибка экспорта документов');
+    } finally {
+      setExportLoading(prev => ({ ...prev, documents: false }));
+    }
+  };
+
+  const handleExportProfile = async () => {
+    setExportLoading(prev => ({ ...prev, profile: true }));
+    try {
+      const response = await fetch('/api/settings/data/export/profile');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Ошибка экспорта профиля');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ESG_Profile_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Ошибка экспорта профиля:', error);
+      alert(error instanceof Error ? error.message : 'Ошибка экспорта профиля');
+    } finally {
+      setExportLoading(prev => ({ ...prev, profile: false }));
+    }
+  };
+
+  const handleExportFull = async () => {
+    setExportLoading(prev => ({ ...prev, full: true }));
+    try {
+      const response = await fetch('/api/settings/data/export/full');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Ошибка полного экспорта');
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ESG_Full_Export_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Ошибка полного экспорта:', error);
+      alert(error instanceof Error ? error.message : 'Ошибка полного экспорта');
+    } finally {
+      setExportLoading(prev => ({ ...prev, full: false }));
+    }
+  };
+
+  const handleImportExcel = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/settings/data/import/excel', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.message || 'Ошибка импорта');
+        }
+
+        alert(`Импорт завершён!\nУспешно: ${result.statistics.successCount}\nОшибок: ${result.statistics.errorCount}`);
+      } catch (error) {
+        console.error('Ошибка импорта:', error);
+        alert(error instanceof Error ? error.message : 'Ошибка импорта данных');
+      }
+    };
+    input.click();
+  };
+
+  const handleDeleteAllDocuments = async () => {
+    const confirmation = prompt('Введите "УДАЛИТЬ ВСЕ ДОКУМЕНТЫ" для подтверждения:');
+    if (confirmation !== 'УДАЛИТЬ ВСЕ ДОКУМЕНТЫ') {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/settings/data/documents', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Ошибка удаления документов');
+      }
+
+      alert(`Документы удалены!\nВсего: ${result.statistics.totalDocuments}\nУдалено файлов: ${result.statistics.filesDeleted}`);
+    } catch (error) {
+      console.error('Ошибка удаления документов:', error);
+      alert(error instanceof Error ? error.message : 'Ошибка удаления документов');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmation = prompt('Введите "УДАЛИТЬ МОЙ АККАУНТ" для подтверждения:');
+    if (confirmation !== 'УДАЛИТЬ МОЙ АККАУНТ') {
+      return;
+    }
+
+    const email = prompt(`Введите ваш email (${profileData.email}) для подтверждения:`);
+    if (email !== profileData.email) {
+      alert('Email не совпадает');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/settings/data/account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation, email }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Ошибка удаления аккаунта');
+      }
+
+      alert(`Аккаунт помечен на удаление.\nОкончательное удаление через ${result.daysUntilPermanentDeletion} дней.\n\nДля восстановления свяжитесь с поддержкой.`);
+
+      // Выходим из системы
+      setTimeout(() => onLogout(), 2000);
+    } catch (error) {
+      console.error('Ошибка удаления аккаунта:', error);
+      alert(error instanceof Error ? error.message : 'Ошибка удаления аккаунта');
+    }
+  };
 
   return (
     <Layout currentPage="settings" onNavigate={onNavigate} onLogout={onLogout}>
@@ -88,70 +613,63 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="firstName">Имя</Label>
-                        <Input id="firstName" defaultValue="Иван" />
+                        <Input
+                          id="firstName"
+                          value={profileData.firstName}
+                          onChange={(e) => setProfileData(prev => ({ ...prev, firstName: e.target.value }))}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="lastName">Фамилия</Label>
-                        <Input id="lastName" defaultValue="Петров" />
+                        <Input
+                          id="lastName"
+                          value={profileData.lastName}
+                          onChange={(e) => setProfileData(prev => ({ ...prev, lastName: e.target.value }))}
+                        />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="email">Email</Label>
-                      <Input id="email" type="email" defaultValue="ivan.petrov@company.ru" />
+                      <Input
+                        id="email"
+                        type="email"
+                        value={profileData.email}
+                        onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="phone">Телефон</Label>
-                      <Input id="phone" defaultValue="+7 (999) 123-45-67" />
+                      <Input
+                        id="phone"
+                        value={profileData.phone}
+                        onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="position">Должность</Label>
-                      <Input id="position" defaultValue="Эколог" />
+                      <Input
+                        id="position"
+                        value={profileData.position}
+                        onChange={(e) => setProfileData(prev => ({ ...prev, position: e.target.value }))}
+                      />
                     </div>
-                    <Button>Сохранить изменения</Button>
+                    <Button
+                      onClick={saveProfile}
+                      disabled={loading.profile}
+                      className="bg-[#1dc962] hover:bg-[#19b558] text-white"
+                    >
+                      {loading.profile ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Сохранение...
+                        </div>
+                      ) : (
+                        'Сохранить изменения'
+                      )}
+                    </Button>
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Настройки интерфейса</CardTitle>
-                    <CardDescription>
-                      Персонализируйте внешний вид приложения
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Язык интерфейса</Label>
-                        <p className="text-sm text-muted-foreground">Выберите предпочитаемый язык</p>
-                      </div>
-                      <Select defaultValue="ru">
-                        <SelectTrigger className="w-40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ru">Русский</SelectItem>
-                          <SelectItem value="en">English</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label>Часовой пояс</Label>
-                        <p className="text-sm text-muted-foreground">Используется для отчетов и уведомлений</p>
-                      </div>
-                      <Select defaultValue="msk">
-                        <SelectTrigger className="w-60">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="msk">GMT+3 (Москва)</SelectItem>
-                          <SelectItem value="spb">GMT+3 (Санкт-Петербург)</SelectItem>
-                          <SelectItem value="ekb">GMT+5 (Екатеринбург)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </TabsContent>
 
@@ -171,25 +689,44 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="companyName">Название организации</Label>
-                      <Input id="companyName" defaultValue="ООО «ЭкоТех»" />
+                      <Input
+                        id="companyName"
+                        value={organizationData.name}
+                        onChange={(e) => setOrganizationData(prev => ({ ...prev, name: e.target.value }))}
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="inn">ИНН</Label>
-                        <Input id="inn" defaultValue="7700123456" />
+                        <Input
+                          id="inn"
+                          value={organizationData.inn}
+                          onChange={(e) => setOrganizationData(prev => ({ ...prev, inn: e.target.value }))}
+                        />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="kpp">КПП</Label>
-                        <Input id="kpp" defaultValue="770001001" />
+                        <Input
+                          id="kpp"
+                          value={organizationData.kpp}
+                          onChange={(e) => setOrganizationData(prev => ({ ...prev, kpp: e.target.value }))}
+                        />
                       </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="address">Юридический адрес</Label>
-                      <Input id="address" defaultValue="123456, г. Москва, ул. Примерная, д. 1" />
+                      <Input
+                        id="address"
+                        value={organizationData.address}
+                        onChange={(e) => setOrganizationData(prev => ({ ...prev, address: e.target.value }))}
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="industry">Отрасль</Label>
-                      <Select defaultValue="manufacturing">
+                      <Select
+                        value={organizationData.industry}
+                        onValueChange={(value) => setOrganizationData(prev => ({ ...prev, industry: value }))}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -202,7 +739,20 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                         </SelectContent>
                       </Select>
                     </div>
-                    <Button>Сохранить данные</Button>
+                    <Button
+                      onClick={saveOrganization}
+                      disabled={loading.organization}
+                      className="bg-[#1dc962] hover:bg-[#19b558] text-white"
+                    >
+                      {loading.organization ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Сохранение...
+                        </div>
+                      ) : (
+                        'Сохранить данные'
+                      )}
+                    </Button>
                   </CardContent>
                 </Card>
 
@@ -215,15 +765,22 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between p-4 border border-border/50 rounded-lg">
-                        <div>
-                          <div className="font-medium">Иван Петров</div>
-                          <div className="text-sm text-muted-foreground">Главный эколог</div>
-                          <div className="text-sm text-muted-foreground">ivan.petrov@company.ru</div>
+                      {contacts.map((contact) => (
+                        <div key={contact.id} className="flex items-center justify-between p-4 border border-border/50 rounded-lg">
+                          <div>
+                            <div className="font-medium">{contact.name}</div>
+                            <div className="text-sm text-muted-foreground">{contact.position}</div>
+                            <div className="text-sm text-muted-foreground">{contact.email}</div>
+                          </div>
+                          {contact.isPrimary && <Badge variant="default">Основной</Badge>}
                         </div>
-                        <Badge variant="default">Основной</Badge>
-                      </div>
-                      <Button variant="outline" className="w-full">
+                      ))}
+                      <Button
+                        variant="outline"
+                        className="w-full border-dashed border-2 border-gray-300 hover:border-[#1dc962] hover:bg-[#1dc962]/5 transition-colors"
+                        onClick={openAddContactDialog}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
                         Добавить контактное лицо
                       </Button>
                     </div>
@@ -245,95 +802,127 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div>
-                    <h4 className="font-medium mb-4">Способы доставки</h4>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Mail className="w-4 h-4 text-muted-foreground" />
-                          <div>
-                            <Label>Email уведомления</Label>
-                            <p className="text-sm text-muted-foreground">
-                              Получать уведомления на email
-                            </p>
+                  {notificationsSaveSuccess && (
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                      <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      <p className="text-sm text-green-700">Настройки уведомлений сохранены успешно!</p>
+                    </div>
+                  )}
+
+                  {loading.notifications && (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-[#1dc962]" />
+                    </div>
+                  )}
+
+                  {!loading.notifications && (
+                    <>
+                      <div>
+                        <h4 className="font-medium mb-4">Способы доставки</h4>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Mail className="w-4 h-4 text-muted-foreground" />
+                              <div>
+                                <Label>Email уведомления</Label>
+                                <p className="text-sm text-muted-foreground">
+                                  Получать уведомления на email
+                                </p>
+                              </div>
+                            </div>
+                            <Switch
+                              checked={notifications.email}
+                              onCheckedChange={(checked) =>
+                                setNotifications(prev => ({ ...prev, email: checked }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Smartphone className="w-4 h-4 text-muted-foreground" />
+                              <div>
+                                <Label>Push уведомления</Label>
+                                <p className="text-sm text-muted-foreground">
+                                  Уведомления в браузере
+                                </p>
+                              </div>
+                            </div>
+                            <Switch
+                              checked={notifications.push}
+                              onCheckedChange={(checked) =>
+                                setNotifications(prev => ({ ...prev, push: checked }))
+                              }
+                            />
                           </div>
                         </div>
-                        <Switch 
-                          checked={notifications.email}
-                          onCheckedChange={(checked) => 
-                            setNotifications(prev => ({ ...prev, email: checked }))
-                          }
-                        />
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Smartphone className="w-4 h-4 text-muted-foreground" />
-                          <div>
-                            <Label>Push уведомления</Label>
-                            <p className="text-sm text-muted-foreground">
-                              Уведомления в браузере
-                            </p>
+
+                      <Separator />
+
+                      <div>
+                        <h4 className="font-medium mb-4">Типы уведомлений</h4>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Готовность отчетов</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Когда отчет готов к отправке
+                              </p>
+                            </div>
+                            <Switch
+                              checked={notifications.reports}
+                              onCheckedChange={(checked) =>
+                                setNotifications(prev => ({ ...prev, reports: checked }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Приближение дедлайнов</Label>
+                              <p className="text-sm text-muted-foreground">
+                                За 30, 7 и 1 день до срока сдачи
+                              </p>
+                            </div>
+                            <Switch
+                              checked={notifications.deadlines}
+                              onCheckedChange={(checked) =>
+                                setNotifications(prev => ({ ...prev, deadlines: checked }))
+                              }
+                            />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <Label>Обработка документов</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Результаты обработки загруженных файлов
+                              </p>
+                            </div>
+                            <Switch
+                              checked={notifications.documents}
+                              onCheckedChange={(checked) =>
+                                setNotifications(prev => ({ ...prev, documents: checked }))
+                              }
+                            />
                           </div>
                         </div>
-                        <Switch 
-                          checked={notifications.push}
-                          onCheckedChange={(checked) => 
-                            setNotifications(prev => ({ ...prev, push: checked }))
-                          }
-                        />
                       </div>
-                    </div>
-                  </div>
 
-                  <Separator />
-
-                  <div>
-                    <h4 className="font-medium mb-4">Типы уведомлений</h4>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Готовность отчетов</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Когда отчет готов к отправке
-                          </p>
-                        </div>
-                        <Switch 
-                          checked={notifications.reports}
-                          onCheckedChange={(checked) => 
-                            setNotifications(prev => ({ ...prev, reports: checked }))
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Приближение дедлайнов</Label>
-                          <p className="text-sm text-muted-foreground">
-                            За 30, 7 и 1 день до срока сдачи
-                          </p>
-                        </div>
-                        <Switch 
-                          checked={notifications.deadlines}
-                          onCheckedChange={(checked) => 
-                            setNotifications(prev => ({ ...prev, deadlines: checked }))
-                          }
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label>Обработка документов</Label>
-                          <p className="text-sm text-muted-foreground">
-                            Результаты обработки загруженных файлов
-                          </p>
-                        </div>
-                        <Switch 
-                          checked={notifications.documents}
-                          onCheckedChange={(checked) => 
-                            setNotifications(prev => ({ ...prev, documents: checked }))
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
+                      <Button
+                        onClick={saveNotifications}
+                        disabled={loading.notifications}
+                        className="bg-[#1dc962] hover:bg-[#19b558] text-white"
+                      >
+                        {loading.notifications ? (
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Сохранение...
+                          </div>
+                        ) : (
+                          'Сохранить настройки'
+                        )}
+                      </Button>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -375,20 +964,18 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
 
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <Fingerprint className="w-4 h-4 text-muted-foreground" />
+                        <Fingerprint className="w-4 h-4 text-gray-600" />
                         <div>
                           <Label>Пасскей</Label>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-gray-600">
                             Быстрый вход без пароля
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Switch 
+                        <Switch
                           checked={security.passkey}
-                          onCheckedChange={(checked) => 
-                            setSecurity(prev => ({ ...prev, passkey: checked }))
-                          }
+                          onCheckedChange={handlePasskeyToggle}
                         />
                         {security.passkey && <Badge variant="default">Настроен</Badge>}
                       </div>
@@ -474,36 +1061,56 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Button variant="outline" className="h-auto p-4 flex flex-col items-start">
+                      <Button
+                        variant="outline"
+                        className="h-auto p-4 flex flex-col items-start"
+                        onClick={handleExportReports}
+                        disabled={exportLoading.reports}
+                      >
                         <div className="flex items-center gap-2 mb-2">
-                          <Download className="w-4 h-4" />
+                          {exportLoading.reports ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                           <span className="font-medium">Отчеты</span>
                         </div>
                         <span className="text-sm text-muted-foreground">
                           Все созданные отчеты в формате PDF
                         </span>
                       </Button>
-                      <Button variant="outline" className="h-auto p-4 flex flex-col items-start">
+                      <Button
+                        variant="outline"
+                        className="h-auto p-4 flex flex-col items-start"
+                        onClick={handleExportDocuments}
+                        disabled={exportLoading.documents}
+                      >
                         <div className="flex items-center gap-2 mb-2">
-                          <Download className="w-4 h-4" />
+                          {exportLoading.documents ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                           <span className="font-medium">Документы</span>
                         </div>
                         <span className="text-sm text-muted-foreground">
                           Архив загруженных файлов
                         </span>
                       </Button>
-                      <Button variant="outline" className="h-auto p-4 flex flex-col items-start">
+                      <Button
+                        variant="outline"
+                        className="h-auto p-4 flex flex-col items-start"
+                        onClick={handleExportProfile}
+                        disabled={exportLoading.profile}
+                      >
                         <div className="flex items-center gap-2 mb-2">
-                          <Download className="w-4 h-4" />
+                          {exportLoading.profile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                           <span className="font-medium">Данные профиля</span>
                         </div>
                         <span className="text-sm text-muted-foreground">
                           Информация аккаунта в JSON
                         </span>
                       </Button>
-                      <Button variant="outline" className="h-auto p-4 flex flex-col items-start">
+                      <Button
+                        variant="outline"
+                        className="h-auto p-4 flex flex-col items-start"
+                        onClick={handleExportFull}
+                        disabled={exportLoading.full}
+                      >
                         <div className="flex items-center gap-2 mb-2">
-                          <Download className="w-4 h-4" />
+                          {exportLoading.full ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                           <span className="font-medium">Полный экспорт</span>
                         </div>
                         <span className="text-sm text-muted-foreground">
@@ -523,13 +1130,9 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <Button variant="outline" className="w-full justify-start">
+                      <Button variant="outline" className="w-full justify-start" onClick={handleImportExcel}>
                         <Upload className="w-4 h-4 mr-2" />
                         Импорт из Excel/CSV
-                      </Button>
-                      <Button variant="outline" className="w-full justify-start">
-                        <Upload className="w-4 h-4 mr-2" />
-                        Миграция из другой системы
                       </Button>
                     </div>
                   </CardContent>
@@ -544,11 +1147,15 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <Button variant="outline" className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground">
+                      <Button
+                        variant="outline"
+                        className="text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={handleDeleteAllDocuments}
+                      >
                         <Trash2 className="w-4 h-4 mr-2" />
                         Удалить все документы
                       </Button>
-                      <Button variant="destructive">
+                      <Button variant="destructive" onClick={handleDeleteAccount}>
                         <Trash2 className="w-4 h-4 mr-2" />
                         Удалить аккаунт
                       </Button>
@@ -560,6 +1167,180 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
           </Tabs>
         </div>
       </div>
+
+      {/* Passkey Setup Dialog */}
+      <Dialog open={passkeyDialog.isOpen} onOpenChange={closePasskeyDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Fingerprint className="w-5 h-5 text-[#1dc962]" />
+              Настройка Passkey
+            </DialogTitle>
+            <DialogDescription>
+              Настройте безопасный вход без пароля с помощью биометрии или PIN-кода
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {passkeyDialog.error && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{passkeyDialog.error}</p>
+              </div>
+            )}
+
+            {passkeyDialog.success && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
+                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                <p className="text-sm text-green-700">Passkey успешно настроен!</p>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900">Что такое Passkey?</h4>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  Безопасный вход с помощью Face ID, Touch ID или Windows Hello
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  Нет необходимости запоминать пароли
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                  Защита от фишинга и взлома
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={closePasskeyDialog}
+              disabled={passkeyDialog.isLoading}
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={setupPasskey}
+              disabled={passkeyDialog.isLoading || passkeyDialog.success}
+              className="bg-[#1dc962] hover:bg-[#19b558]"
+            >
+              {passkeyDialog.isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Настройка...
+                </div>
+              ) : passkeyDialog.success ? (
+                'Готово'
+              ) : (
+                'Настроить Passkey'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Contact Dialog */}
+      <Dialog open={contactDialog.isOpen} onOpenChange={closeContactDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-[#1dc962]" />
+              Добавить контактное лицо
+            </DialogTitle>
+            <DialogDescription>
+              Добавьте нового ответственного за отчетность по выбросам
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {contactDialog.error && (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-red-50 border border-red-200">
+                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                <p className="text-sm text-red-700">{contactDialog.error}</p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="contactName">Полное имя</Label>
+                <Input
+                  id="contactName"
+                  placeholder="Иван Иванович Иванов"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactEmail">Email</Label>
+                <Input
+                  id="contactEmail"
+                  type="email"
+                  placeholder="ivan.ivanov@company.ru"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactPhone">Телефон</Label>
+                <Input
+                  id="contactPhone"
+                  placeholder="+7 (999) 123-45-67"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactPosition">Должность</Label>
+                <Input
+                  id="contactPosition"
+                  placeholder="Специалист по экологии"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contactRole">Роль</Label>
+                <Select defaultValue="OTHER">
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MAIN">Руководитель</SelectItem>
+                    <SelectItem value="ACCOUNTANT">Бухгалтер</SelectItem>
+                    <SelectItem value="ECOLOGIST">Эколог</SelectItem>
+                    <SelectItem value="MANAGER">Менеджер</SelectItem>
+                    <SelectItem value="OTHER">Другое</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={closeContactDialog}
+              disabled={contactDialog.isLoading}
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={() => {
+                // TODO: Реализовать добавление контакта
+                console.log('Добавление контакта...');
+                closeContactDialog();
+              }}
+              disabled={contactDialog.isLoading}
+              className="bg-[#1dc962] hover:bg-[#19b558]"
+            >
+              {contactDialog.isLoading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Добавление...
+                </div>
+              ) : (
+                'Добавить контакт'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

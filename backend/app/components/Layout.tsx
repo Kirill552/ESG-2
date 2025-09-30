@@ -1,15 +1,17 @@
 ﻿import React from 'react';
 import { Button } from './ui/button';
 import { motion } from 'motion/react';
-import { 
-  LayoutDashboard, 
-  BarChart3, 
-  FileText, 
-  ClipboardCheck, 
-  Settings, 
+import {
+  LayoutDashboard,
+  BarChart3,
+  FileText,
+  ClipboardCheck,
+  Settings,
   CreditCard,
-  LogOut
+  LogOut,
+  User
 } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 
 type Page = 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
 
@@ -52,7 +54,7 @@ export function Layout({ currentPage, onNavigate, onLogout, children }: LayoutPr
           {navigation.map((item, index) => {
             const Icon = item.icon;
             const isActive = currentPage === item.key;
-            
+
             return (
               <motion.div
                 key={item.key}
@@ -64,8 +66,8 @@ export function Layout({ currentPage, onNavigate, onLogout, children }: LayoutPr
                 <Button
                   variant="ghost"
                   className={`w-full justify-start h-10 transition-all duration-200 ${
-                    isActive 
-                      ? 'bg-[#1dc962] text-white hover:bg-[#1dc962]/90' 
+                    isActive
+                      ? 'bg-[#1dc962] text-white hover:bg-[#1dc962]/90'
                       : 'text-[#58625d] hover:bg-gray-50 hover:text-gray-900'
                   }`}
                   onClick={() => onNavigate(item.key)}
@@ -77,21 +79,26 @@ export function Layout({ currentPage, onNavigate, onLogout, children }: LayoutPr
             );
           })}
         </nav>
-
-        <div className="p-4 border-t border-gray-100">
-          <Button
-            variant="ghost"
-            className="w-full justify-start h-10 text-[#58625d] hover:bg-gray-50 hover:text-gray-900 transition-all duration-200"
-            onClick={onLogout}
-          >
-            <LogOut className="w-4 h-4 mr-3" />
-            <span className="font-medium">Выйти</span>
-          </Button>
-        </div>
       </motion.div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header с уведомлениями */}
+        <div className="h-16 border-b border-gray-100 bg-white flex items-center justify-end px-6 gap-3">
+          <NotificationBell />
+          <div className="w-px h-6 bg-gray-200"></div>
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-2 px-3 py-2 text-[#58625d] hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-all duration-200"
+          >
+            <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+              <User className="w-4 h-4 text-[#58625d]" />
+            </div>
+            <span className="font-medium text-sm">Выйти</span>
+          </button>
+        </div>
+
+        {/* Page Content */}
         {children}
       </div>
     </div>

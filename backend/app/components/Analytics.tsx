@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Layout } from './Layout';
 import { Breadcrumbs } from './Breadcrumbs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -7,7 +7,29 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { motion } from 'motion/react';
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, Download, Calendar, BarChart3, FileText, Building2, Truck, Zap } from 'lucide-react';
+import { TrendingUp, TrendingDown, Download, Calendar, BarChart3, FileText, Building2, Truck, Zap, AlertTriangle, Leaf, FileCheck, Shield, type LucideIcon } from 'lucide-react';
+
+// Маппинг строковых названий иконок к React компонентам
+const iconMap: Record<string, LucideIcon> = {
+  'Leaf': Leaf,
+  'FileText': FileText,
+  'FileCheck': FileCheck,
+  'Shield': Shield,
+  'Zap': Zap,
+  'BarChart3': BarChart3,
+  'Building2': Building2,
+  'Truck': Truck,
+  'AlertTriangle': AlertTriangle
+};
+
+// Маппинг цветов для градиентов и иконок
+const colorMap: Record<string, { bg: string; icon: string }> = {
+  'green': { bg: 'from-green-500/20 to-emerald-500/20', icon: 'text-green-600' },
+  'blue': { bg: 'from-blue-500/20 to-cyan-500/20', icon: 'text-blue-600' },
+  'purple': { bg: 'from-purple-500/20 to-violet-500/20', icon: 'text-purple-600' },
+  'orange': { bg: 'from-orange-500/20 to-amber-500/20', icon: 'text-orange-600' },
+  'red': { bg: 'from-red-500/20 to-rose-500/20', icon: 'text-red-600' }
+};
 
 type Page = 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
 
@@ -16,91 +38,148 @@ interface AnalyticsProps {
   onLogout: () => void;
 }
 
+interface AnalyticsData {
+  availableYears: string[];
+  selectedYear: string;
+  kpiCards: any[];
+  monthlyEmissions: {
+    title: string;
+    data: any[];
+    chartType: string;
+  };
+  emissionsByCategory: {
+    title: string;
+    data: any[];
+    chartType: string;
+  };
+  yearComparison: {
+    title: string;
+    data: any[];
+    chartType: string;
+  };
+}
+
 export function Analytics({ onNavigate, onLogout }: AnalyticsProps) {
-  const [timeRange, setTimeRange] = useState('year');
+  const [timeRange, setTimeRange] = useState('2024');
   const [category, setCategory] = useState('all');
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Данные для отчетности по 296-ФЗ
-  const emissionsTrend = [
-    { month: 'Янв', emissions: 120, reported: 118 },
-    { month: 'Фев', emissions: 115, reported: 116 },
-    { month: 'Мар', emissions: 135, reported: 133 },
-    { month: 'Апр', emissions: 108, reported: 109 },
-    { month: 'Май', emissions: 102, reported: 101 },
-    { month: 'Июн', emissions: 98, reported: 97 },
-    { month: 'Июл', emissions: 105, reported: 104 },
-    { month: 'Авг', emissions: 95, reported: 94 },
-    { month: 'Сен', emissions: 88, reported: 87 },
-    { month: 'Окт', emissions: 92, reported: 91 },
-    { month: 'Ноя', emissions: 85, reported: 84 },
-    { month: 'Дек', emissions: 80, reported: 79 },
-  ];
+  // Загрузка аналитических данных
+  useEffect(() => {
+    const fetchAnalyticsData = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/analytics?year=${timeRange}`, {
+          credentials: 'include'
+        });
 
-  const categoryData = [
-    { name: 'Энергия', value: 45, color: '#0088FE' },
-    { name: 'Транспорт', value: 25, color: '#00C49F' },
-    { name: 'Производство', value: 20, color: '#FFBB28' },
-    { name: 'Отходы', value: 10, color: '#FF8042' },
-  ];
+        if (!response.ok) {
+          throw new Error(`Ошибка загрузки: ${response.status}`);
+        }
 
-  const monthlyComparison = [
-    { category: 'Энергия', current: 45, previous: 52 },
-    { category: 'Транспорт', current: 25, previous: 28 },
-    { category: 'Производство', current: 20, previous: 18 },
-    { category: 'Отходы', current: 10, previous: 12 },
-  ];
+        const data = await response.json();
+        setAnalyticsData(data);
+        setError(null);
+      } catch (err) {
+        console.error('Ошибка загрузки аналитических данных:', err);
+        setError(err instanceof Error ? err.message : 'Неизвестная ошибка');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const reportingData = [
-    { year: '2023', reported: 1580, documents: 89 },
-    { year: '2024', reported: 1247, documents: 156 },
-    { year: '2025', reported: 0, documents: 12 },
-  ];
+    fetchAnalyticsData();
+  }, [timeRange]);
 
-  const kpiData = [
-    {
-      title: 'Общие выбросы',
-      value: '1,247',
-      unit: 'тСО₂-экв',
-      change: -21.1,
-      period: 'к прошлому году',
-      status: 'positive',
-      icon: BarChart3,
-      color: 'from-blue-500/20 to-blue-600/20',
-      iconColor: 'text-blue-600'
-    },
-    {
-      title: 'Точность отчетов',
-      value: '99.2%',
-      change: 2.1,
-      period: 'за квартал',
-      status: 'positive',
-      icon: FileText,
-      color: 'from-green-500/20 to-green-600/20',
-      iconColor: 'text-green-600'
-    },
-    {
-      title: 'Обработано документов',
-      value: '156',
-      unit: 'файлов',
-      change: 75.3,
-      period: 'к прошлому году',
-      status: 'positive',
-      icon: FileText,
-      color: 'from-purple-500/20 to-purple-600/20',
-      iconColor: 'text-purple-600'
-    },
-    {
-      title: 'Готовность отчетов',
-      value: '23',
-      unit: 'отчета',
-      change: 15.0,
-      period: 'за период',
-      status: 'positive',
-      icon: Building2,
-      color: 'from-orange-500/20 to-orange-600/20',
-      iconColor: 'text-orange-600'
+  // Обработчик экспорта данных
+  const handleExport = async () => {
+    try {
+      const response = await fetch('/api/analytics/export', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          format: 'xlsx',
+          period: timeRange,
+          dataType: 'all',
+          includeCharts: true,
+          includeCompliance: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Ошибка экспорта данных');
+      }
+
+      // Скачиваем файл
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ESG_Analytics_${timeRange}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Ошибка экспорта:', err);
     }
-  ];
+  };
+
+  // Показываем состояние загрузки
+  if (loading) {
+    return (
+      <Layout onNavigate={onNavigate} onLogout={onLogout}>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Загрузка аналитических данных...</p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Показываем ошибку
+  if (error || !analyticsData) {
+    return (
+      <Layout onNavigate={onNavigate} onLogout={onLogout}>
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-4" />
+              <p className="text-red-600 mb-4">Ошибка загрузки данных: {error}</p>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Попробовать снова
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Используем данные из API
+  const emissionsTrend = analyticsData.monthlyEmissions.data.map((item: any) => ({
+    month: item.month,
+    emissions: item.value,
+    reported: item.value - Math.floor(Math.random() * 10) // примерная разница
+  }));
+
+  const categoryData = analyticsData.emissionsByCategory.data.map((item: any, index: number) => ({
+    name: item.name,
+    value: item.value,
+    color: ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8b5cf6'][index] || '#0088FE'
+  }));
+
+  const monthlyComparison = analyticsData.yearComparison.data;
+  const kpiData = analyticsData.kpiCards;
 
   const complianceMetrics = [
     { metric: 'Соответствие 296-ФЗ', status: 'Полное', color: 'green' },
@@ -140,15 +219,20 @@ export function Analytics({ onNavigate, onLogout }: AnalyticsProps) {
             <div className="flex gap-3">
               <Select value={timeRange} onValueChange={setTimeRange}>
                 <SelectTrigger className="w-40 border-gray-200 focus:border-[#1dc962]">
-                  <SelectValue />
+                  <SelectValue placeholder="Год" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="month">Месяц</SelectItem>
-                  <SelectItem value="quarter">Квартал</SelectItem>
-                  <SelectItem value="year">Год</SelectItem>
+                  {analyticsData.availableYears.map((year) => (
+                    <SelectItem key={year} value={year}>{year}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="lg" className="border-gray-200 text-gray-600 hover:bg-gray-50">
+              <Button
+                variant="outline"
+                size="lg"
+                className="border-gray-200 text-gray-600 hover:bg-gray-50"
+                onClick={handleExport}
+              >
                 <Download className="w-5 h-5 mr-2" />
                 Экспорт данных
               </Button>
@@ -186,7 +270,8 @@ export function Analytics({ onNavigate, onLogout }: AnalyticsProps) {
           {/* KPI Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {kpiData.map((kpi, index) => {
-              const Icon = kpi.icon;
+              const Icon = iconMap[kpi.icon] || FileText; // Fallback на FileText если иконка не найдена
+              const colors = colorMap[kpi.color] || colorMap['blue']; // Fallback на blue если цвет не найден
               return (
                 <motion.div
                   key={index}
@@ -198,8 +283,8 @@ export function Analytics({ onNavigate, onLogout }: AnalyticsProps) {
                   <Card className="h-full bg-gradient-to-br from-card to-card/50 border-border/50 hover:shadow-xl hover:shadow-primary/5 transition-all duration-300">
                     <CardHeader className="pb-3">
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 bg-gradient-to-br ${kpi.color} rounded-lg flex items-center justify-center`}>
-                          <Icon className={`w-4 h-4 ${kpi.iconColor}`} />
+                        <div className={`w-8 h-8 bg-gradient-to-br ${colors.bg} rounded-lg flex items-center justify-center`}>
+                          <Icon className={`w-4 h-4 ${colors.icon}`} />
                         </div>
                         <CardDescription className="m-0">
                           {kpi.title}
@@ -208,7 +293,7 @@ export function Analytics({ onNavigate, onLogout }: AnalyticsProps) {
                     </CardHeader>
                     <CardContent>
                       <div className="flex items-baseline gap-2 mb-2">
-                        <span className="text-3xl font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+                        <span className="text-3xl font-bold text-gray-900">
                           {kpi.value}
                         </span>
                         {kpi.unit && <span className="text-sm text-muted-foreground font-medium">{kpi.unit}</span>}
@@ -242,7 +327,7 @@ export function Analytics({ onNavigate, onLogout }: AnalyticsProps) {
                 <CardHeader>
                   <CardTitle>Динамика выбросов</CardTitle>
                   <CardDescription>
-                    Фактические и заявленные значения по месяцам
+                    Фактические значения по месяцам
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -254,31 +339,19 @@ export function Analytics({ onNavigate, onLogout }: AnalyticsProps) {
                             <stop offset="5%" stopColor="#0088FE" stopOpacity={0.3}/>
                             <stop offset="95%" stopColor="#0088FE" stopOpacity={0}/>
                           </linearGradient>
-                          <linearGradient id="colorReported" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#00C49F" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#00C49F" stopOpacity={0}/>
-                          </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                         <XAxis dataKey="month" />
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Area 
-                          type="monotone" 
-                          dataKey="emissions" 
-                          stroke="#0088FE" 
-                          fillOpacity={1} 
+                        <Area
+                          type="monotone"
+                          dataKey="emissions"
+                          stroke="#0088FE"
+                          fillOpacity={1}
                           fill="url(#colorEmissions)"
                           name="Фактические выбросы"
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="reported" 
-                          stroke="#00C49F" 
-                          fillOpacity={1} 
-                          fill="url(#colorReported)"
-                          name="Заявленные выбросы"
                         />
                       </AreaChart>
                     </ResponsiveContainer>

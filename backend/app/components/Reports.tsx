@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Layout } from './Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -44,53 +44,81 @@ interface Report {
 export function Reports({ onNavigate, onLogout }: ReportsProps) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [reports, setReports] = useState<Report[]>([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    ready_to_send: 0,
+    close_deadlines: 0,
+    approved: 0
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const reports: Report[] = [
-    {
-      id: 'rep-1',
-      name: 'Отчет о выбросах парниковых газов за Q4 2024',
-      type: '296-ФЗ Квартальный',
-      period: 'Q4 2024',
-      status: 'ready',
-      createdDate: '15.12.2024',
-      submissionDeadline: '31.01.2025',
-      totalEmissions: 312.5,
-      documentCount: 45
-    },
-    {
-      id: 'rep-2',
-      name: 'Годовой отчет о выбросах ПГ 2024',
-      type: '296-ФЗ Годовой',
-      period: '2024',
-      status: 'draft',
-      createdDate: '10.12.2024',
-      submissionDeadline: '31.03.2025',
-      totalEmissions: 1247.8,
-      documentCount: 156
-    },
-    {
-      id: 'rep-3',
-      name: 'Отчет по транспортным выбросам Q3 2024',
-      type: 'Внутренний',
-      period: 'Q3 2024',
-      status: 'submitted',
-      createdDate: '05.10.2024',
-      submissionDeadline: '31.10.2024',
-      totalEmissions: 89.2,
-      documentCount: 23
-    },
-    {
-      id: 'rep-4',
-      name: 'Отчет о выбросах от поставщиков',
-      type: 'Scope 3',
-      period: 'Q4 2024',
-      status: 'approved',
-      createdDate: '20.11.2024',
-      submissionDeadline: '15.12.2024',
-      totalEmissions: 456.7,
-      documentCount: 78
+  // Загрузка отчетов и статистики
+  useEffect(() => {
+    fetchReportsData();
+  }, [statusFilter]);
+
+  const fetchReportsData = async () => {
+    try {
+      setLoading(true);
+
+      // Загружаем отчеты и статистику параллельно
+      const [reportsResponse, statsResponse] = await Promise.all([
+        fetch(`/api/reports?status=${statusFilter}&page=1&pageSize=50`),
+        fetch('/api/reports/stats')
+      ]);
+
+      if (!reportsResponse.ok || !statsResponse.ok) {
+        throw new Error('Failed to fetch data');
+      }
+
+      const reportsData = await reportsResponse.json();
+      const statsData = await statsResponse.json();
+
+      if (reportsData.reports) {
+        setReports(reportsData.reports);
+      } else {
+        // Поддержка демо-режима - данные возвращаются напрямую
+        setReports(reportsData);
+      }
+
+      setStats(statsData);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching reports:', err);
+      setError('Ошибка загрузки отчетов');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const createReport = async (formData: any) => {
+    try {
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create report');
+      }
+
+      const newReport = await response.json();
+      setReports(prev => [newReport, ...prev]);
+      setIsCreateDialogOpen(false);
+
+      // Обновляем статистику
+      fetchReportsData();
+    } catch (err) {
+      console.error('Error creating report:', err);
+      setError(err instanceof Error ? err.message : 'Ошибка создания отчета');
+    }
+  };
 
   const filteredReports = reports.filter(report => 
     statusFilter === 'all' || report.status === statusFilter
@@ -101,11 +129,14 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
       case 'draft':
         return <Badge variant="outline">Черновик</Badge>;
       case 'ready':
-        return <Badge variant="default" className="bg-blue-100 text-blue-800 border-blue-200">Готов</Badge>;
-      case 'submitted':
-        return <Badge variant="secondary">Отправлен</Badge>;
-      case 'approved':
-        return <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">Утвержден</Badge>;
+        return <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">Готов</Badge>;
+      // Скрыто для MVP:
+      // case 'submitted':
+      //   return <Badge variant="secondary">Отправлен</Badge>;
+      // case 'approved':
+      //   return <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">Утвержден</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -114,11 +145,14 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
       case 'draft':
         return <Edit3 className="w-4 h-4 text-muted-foreground" />;
       case 'ready':
-        return <CheckCircle className="w-4 h-4 text-blue-600" />;
-      case 'submitted':
-        return <Clock className="w-4 h-4 text-orange-600" />;
-      case 'approved':
         return <CheckCircle className="w-4 h-4 text-green-600" />;
+      // Скрыто для MVP:
+      // case 'submitted':
+      //   return <Clock className="w-4 h-4 text-orange-600" />;
+      // case 'approved':
+      //   return <CheckCircle className="w-4 h-4 text-green-600" />;
+      default:
+        return <FileText className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
@@ -179,10 +213,7 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                           <SelectValue placeholder="Выберите тип" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="quarterly">296-ФЗ Квартальный</SelectItem>
                           <SelectItem value="annual">296-ФЗ Годовой</SelectItem>
-                          <SelectItem value="internal">Внутренний отчет</SelectItem>
-                          <SelectItem value="scope3">Scope 3 отчет</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -193,10 +224,9 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                           <SelectValue placeholder="Выберите период" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="q1-2025">Q1 2025</SelectItem>
-                          <SelectItem value="q4-2024">Q4 2024</SelectItem>
                           <SelectItem value="2024">2024 год</SelectItem>
                           <SelectItem value="2023">2023 год</SelectItem>
+                          <SelectItem value="2022">2022 год</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -214,7 +244,18 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                   <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                     Отмена
                   </Button>
-                  <Button onClick={() => setIsCreateDialogOpen(false)}>
+                  <Button
+                    onClick={() => {
+                      // В реальном приложении здесь была бы обработка формы
+                      const formData = {
+                        name: "Новый отчет 296-ФЗ",
+                        reportType: "annual",
+                        period: "2024",
+                        description: ""
+                      };
+                      createReport(formData);
+                    }}
+                  >
                     Создать отчет
                   </Button>
                 </div>
@@ -222,13 +263,13 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
             </Dialog>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          {/* Stats - упрощенная версия для MVP */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-semibold">{reports.length}</div>
+                    <div className="text-2xl font-semibold">{loading ? '...' : stats.total}</div>
                     <div className="text-sm text-muted-foreground">Всего отчетов</div>
                   </div>
                   <FileText className="w-8 h-8 text-muted-foreground" />
@@ -239,12 +280,12 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-semibold text-blue-600">
-                      {reports.filter(r => r.status === 'ready').length}
+                    <div className="text-2xl font-semibold text-green-600">
+                      {loading ? '...' : stats.ready_to_send}
                     </div>
-                    <div className="text-sm text-muted-foreground">Готовы к отправке</div>
+                    <div className="text-sm text-muted-foreground">Готовы к работе</div>
                   </div>
-                  <CheckCircle className="w-8 h-8 text-blue-600" />
+                  <CheckCircle className="w-8 h-8 text-green-600" />
                 </div>
               </CardContent>
             </Card>
@@ -253,7 +294,7 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-2xl font-semibold text-orange-600">
-                      {reports.filter(r => isDeadlineNear(r.submissionDeadline)).length}
+                      {loading ? '...' : stats.close_deadlines}
                     </div>
                     <div className="text-sm text-muted-foreground">Близкие дедлайны</div>
                   </div>
@@ -261,19 +302,20 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            {/* Скрыто для MVP (отправка в регулятор): */}
+            {/* <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-2xl font-semibold text-green-600">
-                      {reports.filter(r => r.status === 'approved').length}
+                      {loading ? '...' : stats.approved}
                     </div>
                     <div className="text-sm text-muted-foreground">Утверждены</div>
                   </div>
                   <CheckCircle className="w-8 h-8 text-green-600" />
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
           </div>
 
           {/* Filters */}
@@ -292,13 +334,23 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                     <SelectItem value="all">Все статусы</SelectItem>
                     <SelectItem value="draft">Черновик</SelectItem>
                     <SelectItem value="ready">Готов</SelectItem>
-                    <SelectItem value="submitted">Отправлен</SelectItem>
-                    <SelectItem value="approved">Утвержден</SelectItem>
+                    {/* Скрыто для MVP: */}
+                    {/* <SelectItem value="submitted">Отправлен</SelectItem> */}
+                    {/* <SelectItem value="approved">Утвержден</SelectItem> */}
                   </SelectContent>
                 </Select>
               </div>
             </CardContent>
           </Card>
+
+          {/* Error Message */}
+          {error && (
+            <Card className="mb-6">
+              <CardContent className="p-4">
+                <div className="text-red-600 text-center">{error}</div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Reports Table */}
           <Card>
@@ -316,7 +368,35 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredReports.map((report) => (
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        Загрузка отчетов...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredReports.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                        <div className="space-y-2">
+                          <div className="text-base font-medium">Отчеты не найдены</div>
+                          <div className="text-sm">
+                            {statusFilter === 'all' ? (
+                              <>
+                                У вас пока нет созданных отчетов.<br/>
+                                Нажмите кнопку <strong>"Создать отчет"</strong> чтобы начать.
+                              </>
+                            ) : (
+                              <>
+                                Нет отчетов со статусом "{statusFilter === 'draft' ? 'Черновик' : 'Готов'}".<br/>
+                                Попробуйте изменить фильтр или создать новый отчет.
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredReports.map((report) => (
                     <TableRow key={report.id}>
                       <TableCell>
                         <div>
@@ -375,7 +455,8 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -395,29 +476,15 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-orange-600" />
                     <div>
-                      <div className="font-medium">Отчет о выбросах парниковых газов за Q4 2024</div>
-                      <div className="text-sm text-muted-foreground">Дедлайн: 31 января 2025</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="border-orange-200 text-orange-600">
-                      25 дней осталось
-                    </Badge>
-                    <Button size="sm">Завершить</Button>
-                  </div>
-                </div>
-                
-                <div className="flex items-center justify-between p-4 border border-border/50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-muted-foreground" />
-                    <div>
                       <div className="font-medium">Годовой отчет о выбросах ПГ 2024</div>
                       <div className="text-sm text-muted-foreground">Дедлайн: 31 марта 2025</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="outline">87 дней осталось</Badge>
-                    <Button variant="outline" size="sm">Продолжить</Button>
+                    <Badge variant="outline" className="border-orange-200 text-orange-600">
+                      94 дня осталось
+                    </Badge>
+                    <Button size="sm">Завершить</Button>
                   </div>
                 </div>
               </div>

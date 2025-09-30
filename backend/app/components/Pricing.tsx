@@ -138,12 +138,46 @@ export function Pricing({ onNavigate, onLogout }: PricingProps) {
     setShowRequestForm(true);
   };
 
-  const handleSubmitRequest = (e: React.FormEvent) => {
+  const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Имитация отправки заявки
-    console.log('Заявка отправлена:', formData);
-    setShowRequestForm(false);
-    // Здесь можно добавить уведомление об успешной отправке
+
+    try {
+      const response = await fetch('/api/trial-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          companyName: formData.company,
+          position: formData.name, // Используем имя как должность временно
+          phone: formData.phone,
+          message: `Планы: ${formData.plan}. Сотрудников: ${formData.employees}. Сообщение: ${formData.message}`,
+          requestType: 'TRIAL'
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.ok) {
+        // Успешная отправка заявки
+        alert('Заявка успешно отправлена! Мы свяжемся с вами в ближайшее время.');
+        setShowRequestForm(false);
+        setFormData({
+          company: '',
+          name: '',
+          email: '',
+          phone: '',
+          employees: '',
+          plan: '',
+          message: ''
+        });
+      } else {
+        alert(result.message || 'Произошла ошибка при отправке заявки');
+      }
+    } catch (error) {
+      console.error('Ошибка отправки заявки:', error);
+      alert('Произошла ошибка при отправке заявки. Попробуйте позже.');
+    }
   };
 
   return (

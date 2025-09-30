@@ -9,7 +9,6 @@ import { Documents } from './components/Documents';
 import { Reports } from './components/Reports';
 import { Settings } from './components/Settings';
 import { Pricing } from './components/Pricing';
-import { Toaster } from './components/Toaster';
 
 type Page = 'landing' | 'auth' | 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
 
@@ -146,7 +145,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-background">
       {renderPage()}
-      <Toaster />
     </div>
   );
 }
