@@ -79,8 +79,8 @@ const MIME_TYPES = {
   'text/csv': 'csv',
   'text/tab-separated-values': 'tsv',
   'text/plain': 'txt',
-  'application/xml': 'json', // XML можем парсить как структурированные данные
-  'text/xml': 'json'
+  'application/xml': 'xml',
+  'text/xml': 'xml'
 };
 
 export class FormatDetector {
@@ -197,9 +197,9 @@ export class FormatDetector {
       return { format: 'html', confidence: 0.9 };
     }
 
-    // XML/JSON with XML declaration
+    // XML with XML declaration
     if (this.matchesBytes(sample, MAGIC_BYTES.xml, 0)) {
-      return { format: 'json', confidence: 0.8 }; // Будем парсить XML как структурированные данные
+      return { format: 'xml', confidence: 0.9 };
     }
 
     // ZIP-based formats (XLSX, DOCX, ODT)
@@ -240,7 +240,7 @@ export class FormatDetector {
       'odt': { format: 'odt', confidence: 0.8 },
       'rtf': { format: 'rtf', confidence: 0.8 },
       'txt': { format: 'txt', confidence: 0.7 },
-      'xml': { format: 'json', confidence: 0.6 }
+      'xml': { format: 'xml', confidence: 0.8 }
     };
 
     return extensionMap[extension] || { format: 'unknown', confidence: 0 };
@@ -274,7 +274,7 @@ export class FormatDetector {
 
     // XML
     if (text.trim().startsWith('<?xml') || text.includes('<root>') || text.includes('</')) {
-      return { format: 'json', confidence: 0.6 }; // Парсим XML как структурированные данные
+      return { format: 'xml', confidence: 0.7 };
     }
 
     return { format: 'unknown', confidence: 0 };
@@ -408,6 +408,7 @@ export class FormatDetector {
       tsv: { hasStructure: true, isTextBased: true, requiresOcr: false, supportedByParser: true },
       excel: { hasStructure: true, isTextBased: false, requiresOcr: false, supportedByParser: true },
       json: { hasStructure: true, isTextBased: true, requiresOcr: false, supportedByParser: true },
+      xml: { hasStructure: true, isTextBased: true, requiresOcr: false, supportedByParser: true },
       
       // Текстовые форматы (приоритет 2) - структурные парсеры 2025
       txt: { hasStructure: false, isTextBased: true, requiresOcr: false, supportedByParser: true },
@@ -438,9 +439,10 @@ export class FormatDetector {
     const parserMap = {
       // Структурированные форматы (приоритет 1)
       csv: 'CsvTsvParser',
-      tsv: 'CsvTsvParser', 
+      tsv: 'CsvTsvParser',
       excel: 'ExcelParser',
       json: 'JsonParser',
+      xml: 'XmlParser',
       
       // Текстовые форматы (приоритет 2)
       txt: 'TxtParser',

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import prisma from '@/lib/prisma';
 import { getUserDataByMode } from '@/lib/user-mode-utils';
+import { ensureOrganizationComplete } from '@/lib/check-organization-completeness';
 
 export async function GET(request: NextRequest) {
   try {
@@ -132,6 +133,21 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Проверяем полноту данных организации перед созданием отчета 296-ФЗ
+    const organizationCheck = await ensureOrganizationComplete(user.id);
+
+    if (!organizationCheck.success) {
+      return NextResponse.json(
+        {
+          error: 'ORGANIZATION_INCOMPLETE',
+          message: organizationCheck.error?.message,
+          missingFields: organizationCheck.error?.missingFields,
+          warnings: organizationCheck.error?.warnings,
+        },
+        { status: 400 }
+      );
     }
 
     // Создаем новый отчет

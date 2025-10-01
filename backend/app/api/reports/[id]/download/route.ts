@@ -5,9 +5,9 @@ import prisma from '@/lib/prisma';
 import { getUserDataByMode } from '@/lib/user-mode-utils';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const reportId = params.id;
+    const { id: reportId } = await params;
     const searchParams = request.nextUrl.searchParams;
     const format = searchParams.get('format') || 'pdf'; // pdf, excel
 

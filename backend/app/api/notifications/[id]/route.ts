@@ -5,9 +5,9 @@ import { notificationService } from '@/lib/notification-service';
 import { getUserMode } from '@/lib/user-mode-utils';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 /**
@@ -30,7 +30,7 @@ export async function PATCH(
 
     const userId = (session.user as any).id;
     const userMode = await getUserMode(userId);
-    const notificationId = params.id;
+    const { id: notificationId } = await params;
 
     // DEMO режим - возвращаем успех без изменений БД
     if (userMode === 'DEMO') {

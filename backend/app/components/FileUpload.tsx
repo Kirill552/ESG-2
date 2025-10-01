@@ -28,7 +28,7 @@ interface FileUploadProps {
 
 export function FileUpload({ isOpen, onClose, onUploadComplete }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('AUTO');
   const { toast } = useToast();
 
   const {
@@ -46,9 +46,13 @@ export function FileUpload({ isOpen, onClose, onUploadComplete }: FileUploadProp
     onUploadComplete: (uploadedFiles) => {
       toast({
         title: "Загрузка завершена",
-        description: `Успешно загружено ${uploadedFiles.length} файлов`,
+        description: `Успешно загружено ${uploadedFiles.length} файлов. Документы отправлены на обработку.`,
       });
       onUploadComplete?.();
+      // Закрываем модальное окно после успешной загрузки
+      setTimeout(() => {
+        onClose();
+      }, 1500); // Даем время увидеть уведомление
     },
     onUploadError: (file, error) => {
       toast({
@@ -63,7 +67,7 @@ export function FileUpload({ isOpen, onClose, onUploadComplete }: FileUploadProp
   useEffect(() => {
     if (!isOpen) {
       clearFiles();
-      setSelectedCategory('');
+      setSelectedCategory('AUTO');
     }
   }, [isOpen, clearFiles]);
 
@@ -106,7 +110,9 @@ export function FileUpload({ isOpen, onClose, onUploadComplete }: FileUploadProp
 
   const handleUpload = async () => {
     try {
-      await uploadFiles(selectedCategory || undefined);
+      // Если выбрано "Автоматически" (AUTO), передаем undefined для автоопределения категории
+      const category = selectedCategory === 'AUTO' ? undefined : selectedCategory;
+      await uploadFiles(category);
     } catch (error) {
       toast({
         title: "Ошибка загрузки",
@@ -150,7 +156,7 @@ export function FileUpload({ isOpen, onClose, onUploadComplete }: FileUploadProp
   };
 
   const categories = [
-    { value: '', label: 'Автоматически' },
+    { value: 'AUTO', label: 'Автоматически' },
     { value: 'PRODUCTION', label: '🏭 Производство' },
     { value: 'SUPPLIERS', label: '🚛 Поставщики' },
     { value: 'WASTE', label: '🗑️ Отходы' },

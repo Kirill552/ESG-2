@@ -6,9 +6,9 @@ import { getUserDataByMode } from '@/lib/user-mode-utils';
 import { notificationService, NotificationType, NotificationPriority } from '@/lib/notification-service';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const reportId = params.id;
+    const { id: reportId } = await params;
 
     // Получаем отчет с учетом режима пользователя (demo/paid)
     const report = await getUserDataByMode('reports', async () => {

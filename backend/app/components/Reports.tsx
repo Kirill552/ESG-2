@@ -9,17 +9,22 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { 
-  Plus, 
-  Download, 
-  Eye, 
-  Edit3, 
-  FileText, 
+import { Alert, AlertDescription } from './ui/alert';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
+import { OrganizationDataForm } from './OrganizationDataForm';
+import {
+  Plus,
+  Download,
+  Eye,
+  Edit3,
+  FileText,
   Calendar,
   CheckCircle,
   Clock,
   AlertTriangle,
-  Filter
+  Filter,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 
 type Page = 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
@@ -53,6 +58,20 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Состояния для формы создания отчета
+  const [reportName, setReportName] = useState('');
+  const [reportType, setReportType] = useState('annual');
+  const [reportPeriod, setReportPeriod] = useState('2024');
+  const [reportFormat, setReportFormat] = useState<'pdf' | 'xml'>('pdf');
+  const [reportDescription, setReportDescription] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [validationError, setValidationError] = useState<{
+    message: string;
+    missingFields?: string[];
+    warnings?: string[];
+  } | null>(null);
+  const [showMissingFieldsForm, setShowMissingFieldsForm] = useState(false);
 
   // Загрузка отчетов и статистики
   useEffect(() => {
@@ -93,8 +112,19 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
     }
   };
 
-  const createReport = async (formData: any) => {
+  const handleCreateReport = async () => {
     try {
+      setCreating(true);
+      setValidationError(null);
+
+      const formData = {
+        name: reportName || `Отчет 296-ФЗ за ${reportPeriod}`,
+        reportType,
+        period: reportPeriod,
+        format: reportFormat,
+        description: reportDescription,
+      };
+
       const response = await fetch('/api/reports', {
         method: 'POST',
         headers: {
@@ -105,19 +135,49 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
+
+        // Проверка на ошибку неполных данных организации
+        if (errorData.error === 'ORGANIZATION_INCOMPLETE') {
+          setValidationError({
+            message: errorData.message || 'Необходимо дополнить данные организации',
+            missingFields: errorData.missingFields || [],
+            warnings: errorData.warnings || [],
+          });
+          setShowMissingFieldsForm(true);
+          return;
+        }
+
         throw new Error(errorData.error || 'Failed to create report');
       }
 
       const newReport = await response.json();
       setReports(prev => [newReport, ...prev]);
       setIsCreateDialogOpen(false);
+      resetForm();
 
       // Обновляем статистику
       fetchReportsData();
     } catch (err) {
       console.error('Error creating report:', err);
       setError(err instanceof Error ? err.message : 'Ошибка создания отчета');
+    } finally {
+      setCreating(false);
     }
+  };
+
+  const resetForm = () => {
+    setReportName('');
+    setReportType('annual');
+    setReportPeriod('2024');
+    setReportFormat('pdf');
+    setReportDescription('');
+    setValidationError(null);
+    setShowMissingFieldsForm(false);
+  };
+
+  const handleCloseDialog = () => {
+    setIsCreateDialogOpen(false);
+    resetForm();
   };
 
   const filteredReports = reports.filter(report => 
@@ -193,22 +253,73 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                   Создать отчет
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px]">
+              <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Создание нового отчета</DialogTitle>
                   <DialogDescription>
                     Выберите тип отчета и период для автоматического создания
                   </DialogDescription>
                 </DialogHeader>
+
+                {/* Ошибка валидации данных организации */}
+                {validationError && (
+                  <Alert variant="destructive" className="mt-4">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <div className="font-semibold mb-2">{validationError.message}</div>
+                      {validationError.missingFields && validationError.missingFields.length > 0 && (
+                        <div className="mt-2">
+                          <div className="text-sm font-medium mb-1">Не заполнены обязательные поля:</div>
+                          <ul className="list-disc list-inside text-sm space-y-1">
+                            {validationError.missingFields.map((field, index) => (
+                              <li key={index}>{field}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {validationError.warnings && validationError.warnings.length > 0 && (
+                        <div className="mt-2">
+                          <div className="text-sm font-medium mb-1">Рекомендации:</div>
+                          <ul className="list-disc list-inside text-sm space-y-1">
+                            {validationError.warnings.map((warning, index) => (
+                              <li key={index}>{warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="mt-3 pt-3 border-t">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => {
+                            onNavigate('settings');
+                            handleCloseDialog();
+                          }}
+                        >
+                          Перейти в Настройки → Организация
+                        </Button>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <Label htmlFor="report-name">Название отчета</Label>
-                    <Input id="report-name" placeholder="Введите название отчета" />
+                    <Input
+                      id="report-name"
+                      placeholder="Введите название отчета"
+                      value={reportName}
+                      onChange={(e) => setReportName(e.target.value)}
+                      disabled={creating}
+                    />
                   </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="report-type">Тип отчета</Label>
-                      <Select>
+                      <Select value={reportType} onValueChange={setReportType} disabled={creating}>
                         <SelectTrigger>
                           <SelectValue placeholder="Выберите тип" />
                         </SelectTrigger>
@@ -217,13 +328,15 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                         </SelectContent>
                       </Select>
                     </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="report-period">Отчетный период</Label>
-                      <Select>
+                      <Select value={reportPeriod} onValueChange={setReportPeriod} disabled={creating}>
                         <SelectTrigger>
                           <SelectValue placeholder="Выберите период" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="2025">2025 год</SelectItem>
                           <SelectItem value="2024">2024 год</SelectItem>
                           <SelectItem value="2023">2023 год</SelectItem>
                           <SelectItem value="2022">2022 год</SelectItem>
@@ -231,36 +344,104 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                       </Select>
                     </div>
                   </div>
+
+                  {/* Выбор формата отчета */}
+                  <div className="space-y-2">
+                    <Label>Формат отчета</Label>
+                    <RadioGroup
+                      value={reportFormat}
+                      onValueChange={(value) => setReportFormat(value as 'pdf' | 'xml')}
+                      disabled={creating}
+                      className="grid grid-cols-2 gap-4"
+                    >
+                      <div className="relative">
+                        <RadioGroupItem value="pdf" id="format-pdf" className="peer sr-only" />
+                        <Label
+                          htmlFor="format-pdf"
+                          className={`flex flex-col items-center justify-between rounded-lg border-2 p-4 cursor-pointer transition-all ${
+                            reportFormat === 'pdf'
+                              ? 'border-[#1dc962] bg-[#1dc962]/5 shadow-sm'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <FileText className={`mb-2 h-6 w-6 ${reportFormat === 'pdf' ? 'text-[#1dc962]' : 'text-gray-400'}`} />
+                          <div className="text-center">
+                            <div className={`font-semibold ${reportFormat === 'pdf' ? 'text-[#1dc962]' : 'text-gray-900'}`}>PDF</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Удобный для печати и отправки
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+
+                      <div className="relative">
+                        <RadioGroupItem value="xml" id="format-xml" className="peer sr-only" />
+                        <Label
+                          htmlFor="format-xml"
+                          className={`flex flex-col items-center justify-between rounded-lg border-2 p-4 cursor-pointer transition-all ${
+                            reportFormat === 'xml'
+                              ? 'border-[#1dc962] bg-[#1dc962]/5 shadow-sm'
+                              : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <FileText className={`mb-2 h-6 w-6 ${reportFormat === 'xml' ? 'text-[#1dc962]' : 'text-gray-400'}`} />
+                          <div className="text-center">
+                            <div className={`font-semibold ${reportFormat === 'xml' ? 'text-[#1dc962]' : 'text-gray-900'}`}>XML</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Для подачи в Росприроднадзор
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="description">Описание (опционально)</Label>
-                    <Textarea 
-                      id="description" 
+                    <Textarea
+                      id="description"
                       placeholder="Дополнительные комментарии к отчету"
                       rows={3}
+                      value={reportDescription}
+                      onChange={(e) => setReportDescription(e.target.value)}
+                      disabled={creating}
                     />
                   </div>
                 </div>
-                <div className="flex justify-end space-x-2">
-                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+
+                <div className="flex justify-end space-x-2 pt-4 border-t">
+                  <Button variant="outline" onClick={handleCloseDialog} disabled={creating}>
                     Отмена
                   </Button>
                   <Button
-                    onClick={() => {
-                      // В реальном приложении здесь была бы обработка формы
-                      const formData = {
-                        name: "Новый отчет 296-ФЗ",
-                        reportType: "annual",
-                        period: "2024",
-                        description: ""
-                      };
-                      createReport(formData);
-                    }}
+                    onClick={handleCreateReport}
+                    disabled={creating || !reportPeriod}
+                    className="bg-[#1dc962] hover:bg-[#1dc962]/90"
                   >
-                    Создать отчет
+                    {creating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Создание...
+                      </>
+                    ) : (
+                      'Создать отчет'
+                    )}
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Форма заполнения недостающих данных организации */}
+            <OrganizationDataForm
+              isOpen={showMissingFieldsForm}
+              onClose={() => setShowMissingFieldsForm(false)}
+              onSuccess={() => {
+                // После успешного сохранения пробуем создать отчет снова
+                handleCreateReport();
+              }}
+              missingFields={validationError?.missingFields}
+              warnings={validationError?.warnings}
+            />
           </div>
 
           {/* Stats - упрощенная версия для MVP */}

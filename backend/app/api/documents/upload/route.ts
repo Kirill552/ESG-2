@@ -6,9 +6,8 @@ import { Logger } from "@/lib/logger";
 import { getCurrentUserMode } from "@/lib/user-mode-utils";
 import { notificationService, NotificationType, NotificationPriority } from "@/lib/notification-service";
 import { batchNotificationService } from "@/lib/batch-notification-service";
-import { writeFile, mkdir } from "fs/promises";
-import { existsSync } from "fs";
-import path from "path";
+import { uploadFile, generateFileKey } from "@/lib/s3";
+import { getBoss } from "@/lib/pg-boss-config";
 import crypto from "crypto";
 
 const logger = new Logger("documents-upload-api");
@@ -51,21 +50,6 @@ function inferDocumentCategory(fileName: string): string {
   }
 
   return 'OTHER';
-}
-
-// Функция для генерации безопасного имени файла
-function generateSafeFileName(originalName: string, fileType: string): string {
-  const timestamp = Date.now();
-  const randomBytes = crypto.randomBytes(8).toString('hex');
-  const extension = SUPPORTED_FILE_TYPES[fileType as keyof typeof SUPPORTED_FILE_TYPES]?.extension || 'bin';
-
-  // Очищаем имя файла от небезопасных символов
-  const safeName = originalName
-    .replace(/[^a-zA-Z0-9а-яА-Я._-]/g, '_')
-    .replace(/_{2,}/g, '_')
-    .substring(0, 100); // Ограничиваем длину
-
-  return `${timestamp}_${randomBytes}_${safeName}.${extension}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -181,30 +165,37 @@ export async function POST(req: NextRequest) {
     // Определяем категорию документа
     const category = categoryOverride || inferDocumentCategory(file.name);
 
-    // Генерируем безопасное имя файла
-    const safeFileName = generateSafeFileName(file.name, file.type);
-
-    // Создаем директорию для загрузок, если не существует
-    const uploadsDir = path.join(process.cwd(), 'uploads', user.id);
-    if (!existsSync(uploadsDir)) {
-      await mkdir(uploadsDir, { recursive: true });
-    }
-
-    // Сохраняем файл на диск
-    const filePath = path.join(uploadsDir, safeFileName);
+    // Получаем buffer файла
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    await writeFile(filePath, buffer);
+    // Генерируем уникальный ключ файла для S3
+    const fileKey = generateFileKey(file.name, `documents/${user.id}`);
+
+    // Загружаем файл в Yandex Object Storage (S3)
+    logger.info("Uploading file to S3", {
+      userId: user.id,
+      fileName: file.name,
+      fileSize: file.size,
+      fileKey
+    });
+
+    const s3Url = await uploadFile(fileKey, buffer, file.type);
+
+    logger.info("File uploaded to S3 successfully", {
+      userId: user.id,
+      fileKey,
+      s3Url
+    });
 
     // Создаем запись в БД
     const document = await prisma.document.create({
       data: {
-        fileName: safeFileName,
+        fileName: fileKey, // Сохраняем S3 key вместо локального пути
         originalName: file.name,
         fileSize: file.size,
         fileType: file.type,
-        filePath: filePath,
+        filePath: s3Url, // Сохраняем S3 URL
         status: 'UPLOADED',
         category: category as any,
         userId: user.id,
@@ -266,12 +257,35 @@ export async function POST(req: NextRequest) {
       // Не прерываем выполнение если уведомление не отправилось
     }
 
-    // TODO: Здесь можно добавить задачу в очередь для обработки документа OCR
-    // await addToProcessingQueue(document.id);
+    // ✅ Добавляем задачу в очередь OCR для автоматической обработки
+    try {
+      const boss = await getBoss();
+      await boss.send('ocr-processing', {
+        documentId: document.id,
+        userId: user.id,
+        filePath: s3Url,
+        fileName: file.name,
+        fileType: file.type,
+        category: category
+      });
+
+      logger.info("Document added to OCR queue", {
+        documentId: document.id,
+        userId: user.id,
+        fileName: file.name
+      });
+    } catch (queueError) {
+      logger.error("Failed to add document to OCR queue",
+        queueError instanceof Error ? queueError : undefined,
+        { documentId: document.id }
+      );
+      // Не прерываем выполнение, если не удалось добавить в очередь
+      // Пользователь может обработать документ вручную позже
+    }
 
     return NextResponse.json({
       ok: true,
-      message: "Документ успешно загружен.",
+      message: "Документ успешно загружен и поставлен в очередь на обработку.",
       document
     });
 

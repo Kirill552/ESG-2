@@ -311,6 +311,115 @@ export async function getOcrStatus(): Promise<{
 }
 
 /**
+ * Постобработка OCR текста через Foundation Models (Levels 3-5)
+ * Level 3: Исправление ошибок OCR (GigaChat Lite)
+ * Level 4: Извлечение структурированных данных (GigaChat Pro)
+ * Level 5: Сложный анализ (GigaChat 2 MAX)
+ */
+export async function postProcessWithFoundationModels(
+  ocrText: string,
+  options?: {
+    fixErrors?: boolean;
+    extractData?: boolean;
+    classifyCategory?: boolean;
+  }
+): Promise<{
+  fixedText?: string;
+  extractedData?: any;
+  category?: string;
+  categoryConfidence?: number;
+}> {
+  const result: {
+    fixedText?: string;
+    extractedData?: any;
+    category?: string;
+    categoryConfidence?: number;
+  } = {};
+
+  try {
+    const { FoundationModelsClient } = await import('./foundation-models-client');
+    const client = new FoundationModelsClient();
+
+    // Level 3: Исправление ошибок OCR (опционально)
+    if (options?.fixErrors !== false) {
+      console.log('🔧 Level 3: Исправление ошибок OCR через GigaChat Lite...');
+      try {
+        result.fixedText = await client.fixOcrErrors(ocrText);
+      } catch (error) {
+        console.error('⚠️ Level 3 failed, using original text:', error);
+        result.fixedText = ocrText;
+      }
+    }
+
+    const textForProcessing = result.fixedText || ocrText;
+
+    // Level 4: Извлечение данных (опционально)
+    if (options?.extractData !== false) {
+      console.log('📊 Level 4: Извлечение данных через GigaChat Pro...');
+      try {
+        const extraction = await client.extractEnergyData(textForProcessing);
+        result.extractedData = extraction.extractedData;
+      } catch (error) {
+        console.error('⚠️ Level 4 failed:', error);
+      }
+    }
+
+    // Level 5: Классификация категории (опционально)
+    if (options?.classifyCategory !== false) {
+      console.log('🏷️ Level 5: Классификация категории через GigaChat 2 MAX...');
+      try {
+        const classification = await client.classifyDocumentCategory(textForProcessing);
+        result.category = classification.category;
+        result.categoryConfidence = classification.confidence;
+      } catch (error) {
+        console.error('⚠️ Level 5 failed:', error);
+      }
+    }
+
+    return result;
+  } catch (error) {
+    console.error('❌ Foundation Models постобработка недоступна:', error);
+    return { fixedText: ocrText };
+  }
+}
+
+/**
+ * Полная многоуровневая обработка: OCR (Levels 1-2) + постобработка (Levels 3-5)
+ */
+export async function processImageWithPostProcessing(
+  buffer: Buffer,
+  options?: {
+    ocrOptions?: MultiLevelOcrOptions;
+    postProcessOptions?: {
+      fixErrors?: boolean;
+      extractData?: boolean;
+      classifyCategory?: boolean;
+    };
+  }
+): Promise<OcrResult & {
+  fixedText?: string;
+  extractedData?: any;
+  category?: string;
+  categoryConfidence?: number;
+}> {
+  console.log('🚀 Запуск полной многоуровневой обработки (Levels 1-5)...');
+
+  // Levels 1-2: Базовый OCR
+  const ocrResult = await processImageMultiLevel(buffer, options?.ocrOptions);
+
+  // Levels 3-5: Постобработка через Foundation Models
+  const postProcessed = await postProcessWithFoundationModels(
+    ocrResult.text,
+    options?.postProcessOptions
+  );
+
+  return {
+    ...ocrResult,
+    ...postProcessed
+  };
+}
+
+/**
  * Экспорт для совместимости с существующим кодом
  */
 export { processImage as processTesseractImage } from './ocr';

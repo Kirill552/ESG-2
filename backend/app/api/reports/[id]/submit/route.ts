@@ -5,9 +5,9 @@ import prisma from '@/lib/prisma';
 import { getUserDataByMode } from '@/lib/user-mode-utils';
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function POST(request: NextRequest, { params }: RouteParams) {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const reportId = params.id;
+    const { id: reportId } = await params;
 
     // В демо-режиме отправка недоступна
     const isDemo = await getUserDataByMode('reports', async () => false);

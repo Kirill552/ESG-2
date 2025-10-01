@@ -1,4 +1,4 @@
-import 'server-only'
+// Убрал 'server-only' для совместимости с worker
 import { PrismaClient } from '@prisma/client'
 import { encryptionMiddleware } from './prisma-encryption-middleware'
 

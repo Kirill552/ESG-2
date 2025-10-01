@@ -15,6 +15,7 @@ export { HtmlParser } from './html-parser';
 export { OfficeDocumentParser } from './office-parser';
 export { PdfParser } from './pdf-parser';
 export { RtfParser } from './rtf-parser';
+export { XmlParser } from './xml-parser';
 
 // Детектор формата
 export { FormatDetector } from '../format-detector';
@@ -29,6 +30,7 @@ import { HtmlParser } from './html-parser';
 import { OfficeDocumentParser } from './office-parser';
 import { PdfParser } from './pdf-parser';
 import { RtfParser } from './rtf-parser';
+import { XmlParser } from './xml-parser';
 import { FormatDetector, FileFormatInfo } from '../format-detector';
 
 /**
@@ -37,7 +39,7 @@ import { FormatDetector, FileFormatInfo } from '../format-detector';
 export class ParserFactory {
   private static parsers = new Map<string, typeof BaseParser>([
     ['csv', CsvTsvParser],
-    ['tsv', CsvTsvParser], 
+    ['tsv', CsvTsvParser],
     ['excel', ExcelParser],
     ['json', JsonParser],
     ['txt', TxtParser],
@@ -52,7 +54,8 @@ export class ParserFactory {
     ['odp', OfficeDocumentParser],
     ['ods', OfficeDocumentParser],
     ['rtf', RtfParser],
-    ['pdf', PdfParser]
+    ['pdf', PdfParser],
+    ['xml', XmlParser]
   ]);
 
   /**

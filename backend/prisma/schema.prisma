@@ -564,7 +564,13 @@ model OrganizationProfile {
   inn                 String                    @unique
   kpp                 String?
   ogrn                String?
+  okpo                String? // Добавлено для 296-ФЗ
+  okved               String? // Добавлено для 296-ФЗ
+  oktmo               String? // Добавлено для 296-ФЗ
+  okato               String? // Добавлено для 296-ФЗ
   legalAddress        String?
+  postalAddress       String? // Почтовый адрес отдельно
+  factualAddress      String? // Фактический адрес отдельно
   bankAccount         String?
   bankBic             String?
   bankName            String?
@@ -574,12 +580,28 @@ model OrganizationProfile {
   tochkaCustomerCode  String?
   defaultReportFormat String?
   status              OrganizationProfileStatus @default(DRAFT)
-  checkoData          Json?
+  // Данные руководителя (для отчетов 296-ФЗ)
+  directorName        String? // ФИО руководителя
+  directorPosition    String? // Должность руководителя
+  // Дополнительные данные из Dadata
+  opfCode             String? // Код организационно-правовой формы
+  opfFull             String? // Полное название ОПФ (ООО, АО, и т.д.)
+  opfShort            String? // Краткое название ОПФ
+  registrationDate    DateTime? // Дата регистрации в ЕГРЮЛ
+  liquidationDate     DateTime? // Дата ликвидации (если есть)
+  companyStatus       String? // ACTIVE, LIQUIDATING, LIQUIDATED и т.д.
+  branchType          String? // MAIN или BRANCH
+  branchCount         Int? // Количество филиалов
+  // JSON с полными данными из Dadata (для истории и отладки)
+  dadataRawData       Json?
+  dadataUpdatedAt     DateTime? // Когда последний раз обновлялись данные из Dadata
+  checkoData          Json? // Старые данные из Checko (deprecated)
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
   organization        Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([inn])
+  @@index([ogrn])
   @@map("organization_profiles")
 }
 

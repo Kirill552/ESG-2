@@ -88,16 +88,24 @@ export async function GET(req: NextRequest) {
         id: true,
         name: true,
         inn: true,
-        kpp: true,
-        ogrn: true,
         address: true,
-        industry: true,
-        okvedCode: true,
-        okvedName: true,
-        director: true,
-        directorPosition: true,
         phone: true,
         email: true,
+        profile: {
+          select: {
+            kpp: true,
+            ogrn: true,
+            okpo: true,
+            okved: true,
+            oktmo: true,
+            okato: true,
+            fullName: true,
+            shortName: true,
+            legalAddress: true,
+            directorName: true,
+            directorPosition: true,
+          }
+        },
         website: true,
       }
     });
@@ -108,9 +116,32 @@ export async function GET(req: NextRequest) {
       mode: userMode
     });
 
+    // Объединяем данные из organization и profile
+    const organizationData = organization ? {
+      id: organization.id,
+      name: organization.name,
+      inn: organization.inn,
+      address: organization.address,
+      phone: organization.phone,
+      email: organization.email,
+      website: organization.website,
+      // Данные из profile
+      kpp: organization.profile?.kpp,
+      ogrn: organization.profile?.ogrn,
+      okpo: organization.profile?.okpo,
+      okved: organization.profile?.okved,
+      oktmo: organization.profile?.oktmo,
+      okato: organization.profile?.okato,
+      fullName: organization.profile?.fullName,
+      shortName: organization.profile?.shortName,
+      legalAddress: organization.profile?.legalAddress,
+      directorName: organization.profile?.directorName,
+      directorPosition: organization.profile?.directorPosition,
+    } : null;
+
     return NextResponse.json({
       ok: true,
-      organization: organization || null
+      organization: organizationData
     });
 
   } catch (error) {
@@ -192,40 +223,44 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Получаем существующую организацию
+    // Получаем существующую организацию с профилем
     const existingOrganization = await prisma.organization.findUnique({
       where: { userId: user.id },
       select: {
         id: true,
         name: true,
         inn: true,
-        kpp: true,
+        profile: {
+          select: {
+            id: true,
+            inn: true,
+            kpp: true,
+          }
+        }
       }
     });
 
-    // Проверяем уникальность ИНН, если он изменился
-    if (!existingOrganization || existingOrganization.inn !== payload.inn) {
-      const orgWithSameInn = await prisma.organization.findUnique({
-        where: { inn: payload.inn },
-        select: { id: true, userId: true }
-      });
+    // Проверяем уникальность ИНН в OrganizationProfile
+    const existingProfile = await prisma.organizationProfile.findUnique({
+      where: { inn: payload.inn },
+      select: { id: true, organizationId: true }
+    });
 
-      if (orgWithSameInn && orgWithSameInn.userId !== user.id) {
-        return NextResponse.json(
-          {
-            ok: false,
-            message: "Организация с таким ИНН уже зарегистрирована другим пользователем.",
-          },
-          { status: 409 }
-        );
-      }
+    if (existingProfile && existingProfile.organizationId !== existingOrganization?.id) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message: "Организация с таким ИНН уже зарегистрирована другим пользователем.",
+        },
+        { status: 409 }
+      );
     }
 
     // Сохраняем старые значения для аудита
     const oldValues = existingOrganization ? {
       name: existingOrganization.name,
       inn: existingOrganization.inn,
-      kpp: existingOrganization.kpp,
+      kpp: existingOrganization.profile?.kpp,
     } : null;
 
     // Обновляем или создаем организацию
@@ -234,52 +269,89 @@ export async function PUT(req: NextRequest) {
       update: {
         name: payload.name,
         inn: payload.inn,
-        kpp: payload.kpp || null,
-        ogrn: payload.ogrn || null,
         address: payload.address || null,
-        industry: payload.industry || null,
-        okvedCode: payload.okvedCode || null,
-        okvedName: payload.okvedName || null,
-        director: payload.director || null,
-        directorPosition: payload.directorPosition || null,
         phone: payload.phone || null,
         email: payload.email || null,
-        website: payload.website || null,
       },
       create: {
         userId: user.id,
         name: payload.name,
         inn: payload.inn,
-        kpp: payload.kpp || null,
-        ogrn: payload.ogrn || null,
         address: payload.address || null,
-        industry: payload.industry || null,
-        okvedCode: payload.okvedCode || null,
-        okvedName: payload.okvedName || null,
-        director: payload.director || null,
-        directorPosition: payload.directorPosition || null,
         phone: payload.phone || null,
         email: payload.email || null,
-        website: payload.website || null,
         isBlocked: false,
       },
       select: {
         id: true,
         name: true,
         inn: true,
-        kpp: true,
-        ogrn: true,
         address: true,
-        industry: true,
-        okvedCode: true,
-        okvedName: true,
-        director: true,
-        directorPosition: true,
         phone: true,
         email: true,
-        website: true,
       }
     });
+
+    // Обновляем или создаем профиль организации
+    const profile = await prisma.organizationProfile.upsert({
+      where: {
+        organizationId: organization.id
+      },
+      update: {
+        inn: payload.inn,
+        kpp: payload.kpp || null,
+        ogrn: payload.ogrn || null,
+        okved: payload.okvedCode || null,
+        legalAddress: payload.address || null,
+        directorName: payload.director || null,
+        directorPosition: payload.directorPosition || null,
+      },
+      create: {
+        organizationId: organization.id,
+        inn: payload.inn,
+        kpp: payload.kpp || null,
+        ogrn: payload.ogrn || null,
+        okved: payload.okvedCode || null,
+        legalAddress: payload.address || null,
+        directorName: payload.director || null,
+        directorPosition: payload.directorPosition || null,
+      },
+      select: {
+        id: true,
+        kpp: true,
+        ogrn: true,
+        okpo: true,
+        okved: true,
+        oktmo: true,
+        okato: true,
+        fullName: true,
+        shortName: true,
+        legalAddress: true,
+        directorName: true,
+        directorPosition: true,
+      }
+    });
+
+    // Объединяем данные для возврата
+    const organizationData = {
+      id: organization.id,
+      name: organization.name,
+      inn: organization.inn,
+      address: organization.address,
+      phone: organization.phone,
+      email: organization.email,
+      kpp: profile.kpp,
+      ogrn: profile.ogrn,
+      okpo: profile.okpo,
+      okved: profile.okved,
+      oktmo: profile.oktmo,
+      okato: profile.okato,
+      fullName: profile.fullName,
+      shortName: profile.shortName,
+      legalAddress: profile.legalAddress,
+      directorName: profile.directorName,
+      directorPosition: profile.directorPosition,
+    };
 
     // Записываем в аудит-лог
     await prisma.auditLog.create({
@@ -311,7 +383,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       message: existingOrganization ? "Организация успешно обновлена." : "Организация успешно создана.",
-      organization
+      organization: organizationData
     });
 
   } catch (error) {

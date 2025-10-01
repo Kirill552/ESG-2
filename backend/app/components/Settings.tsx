@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { startRegistration } from '@simplewebauthn/browser';
 import {
   User,
@@ -27,7 +28,8 @@ import {
   AlertCircle,
   CheckCircle,
   Plus,
-  Loader2
+  Loader2,
+  ChevronDown
 } from 'lucide-react';
 
 type Page = 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
@@ -52,8 +54,22 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
     inn: '7700123456',
     kpp: '770001001',
     address: '123456, г. Москва, ул. Примерная, д. 1',
-    industry: 'manufacturing'
+    industry: 'manufacturing',
+    // Дополнительные поля для 296-ФЗ
+    ogrn: '',
+    okpo: '',
+    oktmo: '',
+    okato: '',
+    okved: '',
+    fullName: '',
+    legalAddress: '',
+    directorName: '',
+    directorPosition: ''
   });
+
+  const [isAdditionalFieldsOpen, setIsAdditionalFieldsOpen] = useState(false);
+
+  const [innAutofillLoading, setInnAutofillLoading] = useState(false);
 
   const [contacts, setContacts] = useState([
     {
@@ -125,6 +141,46 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
     checkPasskeyStatus();
   }, []);
 
+  // Загружаем данные организации при монтировании
+  useEffect(() => {
+    const loadOrganizationData = async () => {
+      setLoading(prev => ({ ...prev, organization: true }));
+      try {
+        const response = await fetch('/api/settings/organization');
+
+        if (response.ok) {
+          const result = await response.json();
+
+          if (result.ok && result.organization) {
+            const org = result.organization;
+            setOrganizationData({
+              name: org.name || '',
+              inn: org.inn || '',
+              kpp: org.kpp || '',
+              address: org.address || '',
+              industry: org.industry || 'manufacturing',
+              ogrn: org.ogrn || '',
+              okpo: org.okpo || '',
+              oktmo: org.oktmo || '',
+              okato: org.okato || '',
+              okved: org.okved || '',
+              fullName: org.fullName || '',
+              legalAddress: org.legalAddress || org.address || '',
+              directorName: org.directorName || '',
+              directorPosition: org.directorPosition || ''
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Ошибка при загрузке данных организации:', error);
+      } finally {
+        setLoading(prev => ({ ...prev, organization: false }));
+      }
+    };
+
+    loadOrganizationData();
+  }, []);
+
   // Загружаем настройки уведомлений при монтировании
   useEffect(() => {
     const loadNotificationPreferences = async () => {
@@ -193,6 +249,67 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
         }
       } catch (error) {
         console.error('Error removing passkey', error);
+      }
+    }
+  };
+
+  // Автозаполнение реквизитов при вводе ИНН
+  const handleInnChange = async (inn: string) => {
+    setOrganizationData(prev => ({ ...prev, inn }));
+
+    // Убираем пробелы и дефисы
+    const cleanInn = inn.replace(/[\s-]/g, '');
+
+    // Автозаполнение при вводе 10 (ЮЛ) или 12 (ИП) цифр
+    if (cleanInn.length === 10 || cleanInn.length === 12) {
+      setInnAutofillLoading(true);
+
+      try {
+        const response = await fetch('/api/organization/autofill', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ inn: cleanInn }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+
+          if (result.success && result.data) {
+            // Автозаполняем ВСЕ поля из Dadata/Checko API
+            setOrganizationData(prev => ({
+              ...prev,
+              name: result.data.name || prev.name,
+              kpp: result.data.kpp || prev.kpp,
+              address: result.data.address || prev.address,
+              // Дополнительные поля для 296-ФЗ
+              ogrn: result.data.ogrn || prev.ogrn,
+              okpo: result.data.okpo || prev.okpo,
+              oktmo: result.data.oktmo || prev.oktmo,
+              okato: result.data.okato || prev.okato,
+              okved: result.data.okvedCode || result.data.okved || prev.okved,
+              fullName: result.data.fullName || result.data.name || prev.fullName,
+              legalAddress: result.data.address || prev.legalAddress,
+              directorName: result.data.director || prev.directorName,
+              directorPosition: result.data.directorPosition || prev.directorPosition,
+            }));
+
+            // Автоматически раскрываем секцию с дополнительными полями, если данные заполнены
+            if (result.data.ogrn || result.data.okpo || result.data.director) {
+              setIsAdditionalFieldsOpen(true);
+            }
+
+            console.log(`✅ Данные организации загружены из ${result.dataSource || 'API'}`);
+          }
+        } else {
+          const error = await response.json();
+          console.warn('⚠️ Не удалось загрузить данные организации:', error.error);
+        }
+      } catch (error) {
+        console.error('❌ Ошибка при автозаполнении:', error);
+      } finally {
+        setInnAutofillLoading(false);
       }
     }
   };
@@ -298,7 +415,23 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(organizationData),
+        body: JSON.stringify({
+          name: organizationData.name,
+          inn: organizationData.inn,
+          kpp: organizationData.kpp,
+          address: organizationData.address,
+          industry: organizationData.industry,
+          // Дополнительные поля для 296-ФЗ
+          ogrn: organizationData.ogrn,
+          okpo: organizationData.okpo,
+          oktmo: organizationData.oktmo,
+          okato: organizationData.okato,
+          okvedCode: organizationData.okved,
+          fullName: organizationData.fullName,
+          legalAddress: organizationData.legalAddress,
+          director: organizationData.directorName,
+          directorPosition: organizationData.directorPosition
+        }),
       });
 
       const result = await response.json();
@@ -306,11 +439,14 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
       if (response.ok && result.ok) {
         // Показать уведомление об успехе
         console.log('Данные организации сохранены успешно');
+        alert('Данные организации успешно сохранены!');
       } else {
         console.error('Ошибка сохранения организации:', result.message);
+        alert('Ошибка сохранения: ' + (result.message || 'Неизвестная ошибка'));
       }
     } catch (error) {
       console.error('Ошибка при сохранении организации:', error);
+      alert('Ошибка при сохранении организации');
     } finally {
       setLoading(prev => ({ ...prev, organization: false }));
     }
@@ -697,12 +833,21 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="inn">ИНН</Label>
-                        <Input
-                          id="inn"
-                          value={organizationData.inn}
-                          onChange={(e) => setOrganizationData(prev => ({ ...prev, inn: e.target.value }))}
-                        />
+                        <Label htmlFor="inn">ИНН <span className="text-muted-foreground text-xs font-normal">(автозаполнение по ИНН)</span></Label>
+                        <div className="relative">
+                          <Input
+                            id="inn"
+                            value={organizationData.inn}
+                            onChange={(e) => handleInnChange(e.target.value)}
+                            disabled={innAutofillLoading}
+                            placeholder="Введите ИНН для автозаполнения"
+                          />
+                          {innAutofillLoading && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="kpp">КПП</Label>
@@ -739,6 +884,183 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                         </SelectContent>
                       </Select>
                     </div>
+
+                    <Separator />
+
+                    {/* Дополнительные поля для отчетов 296-ФЗ */}
+                    <Collapsible
+                      open={isAdditionalFieldsOpen}
+                      onOpenChange={setIsAdditionalFieldsOpen}
+                      className="space-y-4"
+                    >
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          className="w-full flex items-center justify-between p-0 h-auto hover:bg-transparent"
+                        >
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-medium text-gray-900">
+                              Дополнительные данные для отчетов 296-ФЗ
+                            </h4>
+                            <Badge variant="outline" className="text-xs">
+                              Опционально
+                            </Badge>
+                          </div>
+                          <ChevronDown
+                            className={`h-4 w-4 text-gray-500 transition-transform duration-200 ${
+                              isAdditionalFieldsOpen ? 'transform rotate-180' : ''
+                            }`}
+                          />
+                        </Button>
+                      </CollapsibleTrigger>
+
+                      <CollapsibleContent className="space-y-4">
+                        <div className="pt-2 space-y-4">
+                          {/* Обязательные поля */}
+                          <div className="space-y-4">
+                            <p className="text-sm text-muted-foreground">
+                              Эти данные необходимы для корректного формирования отчета по 296-ФЗ
+                            </p>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="ogrn">
+                                  ОГРН <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="ogrn"
+                                  value={organizationData.ogrn}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, ogrn: e.target.value }))
+                                  }
+                                  placeholder="1234567890123"
+                                  maxLength={13}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="okved">
+                                  ОКВЭД <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="okved"
+                                  value={organizationData.okved}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, okved: e.target.value }))
+                                  }
+                                  placeholder="01.11"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="fullName">
+                                Полное наименование организации <span className="text-red-500">*</span>
+                              </Label>
+                              <Input
+                                id="fullName"
+                                value={organizationData.fullName}
+                                onChange={(e) =>
+                                  setOrganizationData(prev => ({ ...prev, fullName: e.target.value }))
+                                }
+                                placeholder="Общество с ограниченной ответственностью «ЭкоТех»"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="legalAddress">
+                                Юридический адрес (полный) <span className="text-red-500">*</span>
+                              </Label>
+                              <Input
+                                id="legalAddress"
+                                value={organizationData.legalAddress}
+                                onChange={(e) =>
+                                  setOrganizationData(prev => ({ ...prev, legalAddress: e.target.value }))
+                                }
+                                placeholder="123456, Российская Федерация, г. Москва, ул. Примерная, д. 1, офис 10"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="directorName">
+                                  ФИО руководителя <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="directorName"
+                                  value={organizationData.directorName}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, directorName: e.target.value }))
+                                  }
+                                  placeholder="Иванов Иван Иванович"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="directorPosition">
+                                  Должность руководителя <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="directorPosition"
+                                  value={organizationData.directorPosition}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, directorPosition: e.target.value }))
+                                  }
+                                  placeholder="Генеральный директор"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <Separator />
+
+                          {/* Опциональные поля */}
+                          <div className="space-y-4">
+                            <p className="text-sm text-muted-foreground">
+                              Дополнительные коды (могут потребоваться для некоторых типов отчетов)
+                            </p>
+
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="okpo">ОКПО</Label>
+                                <Input
+                                  id="okpo"
+                                  value={organizationData.okpo}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, okpo: e.target.value }))
+                                  }
+                                  placeholder="12345678"
+                                  maxLength={10}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="oktmo">ОКТМО</Label>
+                                <Input
+                                  id="oktmo"
+                                  value={organizationData.oktmo}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, oktmo: e.target.value }))
+                                  }
+                                  placeholder="12345678"
+                                  maxLength={11}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="okato">ОКАТО</Label>
+                                <Input
+                                  id="okato"
+                                  value={organizationData.okato}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, okato: e.target.value }))
+                                  }
+                                  placeholder="12345678901"
+                                  maxLength={11}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+
                     <Button
                       onClick={saveOrganization}
                       disabled={loading.organization}
