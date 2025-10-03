@@ -20,7 +20,7 @@ async function testPDFGeneration() {
       reportId: 'REP296FZ20250001',
       period: '2024',
       methodology: '296-ФЗ от 02.07.2021 (ПП 707)',
-      submissionDeadline: new Date('2025-03-31'),
+      submissionDeadline: new Date('2025-07-01'), // 296-ФЗ: отчет за 2024 сдается до 1 июля 2025
       organizationInn: '7701234567',
       organizationAddress: '119021, г. Москва, ул. Льва Толстого, д. 16',
       emissionData: {

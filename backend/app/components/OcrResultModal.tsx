@@ -155,7 +155,7 @@ export default function OcrResultModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden">
+      <DialogContent className="max-w-6xl w-full max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="h-5 w-5 text-blue-500" />
@@ -163,7 +163,7 @@ export default function OcrResultModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col h-full max-h-[calc(90vh-100px)]">
+        <div className="flex flex-col h-full max-h-[calc(90vh-120px)]">
           {loading && (
             <div className="flex items-center justify-center p-8">
               <div className="flex items-center gap-2">
@@ -247,11 +247,11 @@ export default function OcrResultModal({
                         <div className="text-sm text-gray-600">
                           Длина текста: {ocrResult.ocr.textLength.toLocaleString()} символов
                         </div>
-                        <ScrollArea className="h-64 w-full border rounded p-4">
+                        <div className="h-96 w-full border rounded p-4 overflow-auto bg-gray-50">
                           <pre className="whitespace-pre-wrap text-sm font-mono">
                             {ocrResult.ocr.fullText}
                           </pre>
-                        </ScrollArea>
+                        </div>
                       </div>
                     ) : (
                       <div className="text-gray-500 italic">

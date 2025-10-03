@@ -12,6 +12,7 @@ import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { OrganizationDataForm } from './OrganizationDataForm';
+import { ReportViewer } from './ReportViewer';
 import {
   Plus,
   Download,
@@ -72,6 +73,13 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
     warnings?: string[];
   } | null>(null);
   const [showMissingFieldsForm, setShowMissingFieldsForm] = useState(false);
+  const [viewerState, setViewerState] = useState<{
+    isOpen: boolean;
+    reportId: string;
+    reportName: string;
+    reportFormat: 'pdf' | 'xml';
+    mode: 'view' | 'edit';
+  } | null>(null);
 
   // Загрузка отчетов и статистики
   useEffect(() => {
@@ -110,6 +118,52 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Просмотр отчета
+  const handleViewReport = async (report: Report) => {
+    setViewerState({
+      isOpen: true,
+      reportId: report.id,
+      reportName: report.name,
+      reportFormat: 'pdf', // TODO: получать из report.format
+      mode: 'view'
+    });
+  };
+
+  // Скачивание отчета
+  const handleDownloadReport = async (report: Report) => {
+    try {
+      const response = await fetch(`/api/reports/${report.id}/download`);
+
+      if (!response.ok) {
+        throw new Error('Не удалось скачать отчет');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${report.name}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Error downloading report:', err);
+      alert('Ошибка при скачивании отчета');
+    }
+  };
+
+  // Редактирование отчета
+  const handleEditReport = (report: Report) => {
+    setViewerState({
+      isOpen: true,
+      reportId: report.id,
+      reportName: report.name,
+      reportFormat: 'pdf', // TODO: получать из report.format
+      mode: 'edit'
+    });
   };
 
   const handleCreateReport = async () => {
@@ -622,14 +676,30 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="sm">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewReport(report)}
+                            title="Просмотр отчета"
+                          >
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="sm">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDownloadReport(report)}
+                            title="Скачать отчет"
+                            disabled={report.status === 'draft'}
+                          >
                             <Download className="w-4 h-4" />
                           </Button>
                           {report.status === 'draft' && (
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditReport(report)}
+                              title="Редактировать отчет"
+                            >
                               <Edit3 className="w-4 h-4" />
                             </Button>
                           )}
@@ -657,13 +727,19 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                   <div className="flex items-center gap-3">
                     <AlertTriangle className="w-5 h-5 text-orange-600" />
                     <div>
-                      <div className="font-medium">Годовой отчет о выбросах ПГ 2024</div>
-                      <div className="text-sm text-muted-foreground">Дедлайн: 31 марта 2025</div>
+                      <div className="font-medium">Годовой отчет о выбросах ПГ 2025</div>
+                      <div className="text-sm text-muted-foreground">Дедлайн: 1 июля 2026</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="border-orange-200 text-orange-600">
-                      94 дня осталось
+                      {(() => {
+                        const deadline = new Date('2026-07-01');
+                        const today = new Date();
+                        const diffTime = deadline.getTime() - today.getTime();
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        return diffDays > 0 ? `${diffDays} дн${diffDays === 1 ? 'ь' : diffDays < 5 ? 'я' : 'ей'} осталось` : 'Просрочен';
+                      })()}
                     </Badge>
                     <Button size="sm">Завершить</Button>
                   </div>
@@ -673,6 +749,20 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
           </Card>
         </div>
       </div>
+
+      {/* Report Viewer/Editor */}
+      {viewerState?.isOpen && (
+        <ReportViewer
+          reportId={viewerState.reportId}
+          reportName={viewerState.reportName}
+          reportFormat={viewerState.reportFormat}
+          mode={viewerState.mode}
+          onClose={() => {
+            setViewerState(null);
+            fetchReportsData(); // Обновляем список после закрытия
+          }}
+        />
+      )}
     </Layout>
   );
 }

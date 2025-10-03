@@ -18,7 +18,8 @@ import {
   CheckCircle,
   AlertTriangle,
   Loader2,
-  Clock
+  Clock,
+  Tag
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -44,6 +45,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { useDocuments, Document } from '@/lib/hooks/useDocuments';
 import { useToast } from '@/lib/hooks/use-toast';
 import OcrResultModal from './OcrResultModal';
+import { getFileTypeLabel } from '@/lib/file-type-labels';
 
 interface DocumentsTableProps {
   className?: string;
@@ -58,6 +60,7 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
   const [pageSize, setPageSize] = useState(25);
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [selectedOcrDocument, setSelectedOcrDocument] = useState<{ id: string; name: string } | null>(null);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
 
   const { toast } = useToast();
 
@@ -185,13 +188,13 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
 
       const result = await reprocessDocuments(ids);
       toast({
-        title: "Переобработка запущена",
+        title: "Распознавание запущено",
         description: result.message,
       });
       if (!documentIds) setSelectedDocuments([]);
     } catch (error) {
       toast({
-        title: "Ошибка переобработки",
+        title: "Ошибка распознавания",
         description: error instanceof Error ? error.message : "Произошла ошибка",
         variant: "destructive",
       });
@@ -207,6 +210,42 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
     setOcrModalOpen(false);
     setSelectedOcrDocument(null);
   }, []);
+
+  const handleChangeCategory = useCallback(async (newCategory: string) => {
+    if (selectedDocuments.length === 0) return;
+
+    try {
+      const response = await fetch('/api/documents/update-category', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentIds: selectedDocuments,
+          category: newCategory
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Не удалось обновить категорию');
+      }
+
+      const result = await response.json();
+      toast({
+        title: "Категория обновлена",
+        description: `Категория изменена для ${selectedDocuments.length} документов`,
+      });
+
+      setSelectedDocuments([]);
+      setCategoryModalOpen(false);
+      refresh();
+    } catch (error) {
+      toast({
+        title: "Ошибка обновления категории",
+        description: error instanceof Error ? error.message : "Произошла ошибка",
+        variant: "destructive",
+      });
+    }
+  }, [selectedDocuments, toast, refresh]);
 
   // Компоненты статусов
   const StatusBadge = ({ status, metadata }: { status: string; metadata: any }) => (
@@ -281,32 +320,6 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
           </div>
         </div>
 
-        {/* Статистика */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-              <div className="text-sm text-gray-600">Всего</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{stats.processed}</div>
-              <div className="text-sm text-gray-600">Обработано</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{stats.processing}</div>
-              <div className="text-sm text-gray-600">В обработке</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">{stats.uploaded}</div>
-              <div className="text-sm text-gray-600">Загружено</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
-              <div className="text-sm text-gray-600">Ошибки</div>
-            </div>
-          </div>
-        )}
-
         {/* Фильтры и поиск */}
         <div className="flex flex-col sm:flex-row gap-4 mt-4">
           <div className="flex-1">
@@ -379,10 +392,10 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => handleBulkAction('delete')}
+                onClick={() => setCategoryModalOpen(true)}
               >
-                <Trash2 className="w-4 h-4 mr-1" />
-                Удалить
+                <Tag className="w-4 h-4 mr-1" />
+                Категория
               </Button>
               <Button
                 size="sm"
@@ -390,7 +403,7 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                 onClick={() => handleReprocess()}
               >
                 <RefreshCw className="w-4 h-4 mr-1" />
-                Переобработать
+                Распознать
               </Button>
               <Button
                 size="sm"
@@ -399,6 +412,14 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
               >
                 <Download className="w-4 h-4 mr-1" />
                 Экспорт
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleBulkAction('delete')}
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Удалить
               </Button>
             </div>
           </motion.div>
@@ -435,7 +456,7 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                       />
                     </TableHead>
                     <TableHead>Название</TableHead>
-                    <TableHead>Тип</TableHead>
+                    <TableHead className="w-24">Тип</TableHead>
                     <TableHead>Размер</TableHead>
                     <TableHead>Статус</TableHead>
                     <TableHead>Категория</TableHead>
@@ -486,8 +507,8 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                         </TableCell>
 
                         <TableCell>
-                          <div className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
-                            {document.fileType.split('/').pop()?.toUpperCase()}
+                          <div className="text-sm font-medium text-gray-700">
+                            {getFileTypeLabel(document.fileType)}
                           </div>
                         </TableCell>
 
@@ -535,7 +556,7 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                                 <MoreHorizontal className="w-4 h-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
+                            <DropdownMenuContent align="end" className="bg-white border shadow-lg">
                               <DropdownMenuItem onClick={() => handleDownload(document)}>
                                 <Download className="w-4 h-4 mr-2" />
                                 Скачать
@@ -549,7 +570,7 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                               {document.hasError && (
                                 <DropdownMenuItem onClick={() => handleReprocess([document.id])}>
                                   <RefreshCw className="w-4 h-4 mr-2" />
-                                  Переобработать
+                                  Распознать
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
@@ -601,20 +622,62 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                   </Button>
 
                   <div className="flex items-center gap-1">
-                    {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-                      const page = i + 1;
-                      return (
-                        <Button
-                          key={page}
-                          variant={page === pagination.page ? "default" : "outline"}
-                          size="sm"
-                          className="w-8 h-8 p-0"
-                          onClick={() => handlePageChange(page)}
-                        >
-                          {page}
-                        </Button>
-                      );
-                    })}
+                    {(() => {
+                      const currentPage = pagination.page;
+                      const totalPages = pagination.pages;
+                      const maxVisible = 7; // Максимальное количество видимых кнопок
+                      const pages: (number | string)[] = [];
+
+                      if (totalPages <= maxVisible) {
+                        // Показываем все страницы если их мало
+                        for (let i = 1; i <= totalPages; i++) {
+                          pages.push(i);
+                        }
+                      } else {
+                        // Умная пагинация для большого количества страниц
+                        pages.push(1); // Всегда показываем первую страницу
+
+                        if (currentPage > 3) {
+                          pages.push('...'); // Многоточие слева
+                        }
+
+                        // Показываем текущую страницу и соседние
+                        const start = Math.max(2, currentPage - 1);
+                        const end = Math.min(totalPages - 1, currentPage + 1);
+
+                        for (let i = start; i <= end; i++) {
+                          pages.push(i);
+                        }
+
+                        if (currentPage < totalPages - 2) {
+                          pages.push('...'); // Многоточие справа
+                        }
+
+                        pages.push(totalPages); // Всегда показываем последнюю страницу
+                      }
+
+                      return pages.map((page, idx) => {
+                        if (page === '...') {
+                          return (
+                            <span key={`ellipsis-${idx}`} className="px-2 text-gray-400">
+                              ...
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <Button
+                            key={page}
+                            variant={page === currentPage ? "default" : "outline"}
+                            size="sm"
+                            className="w-8 h-8 p-0"
+                            onClick={() => handlePageChange(page as number)}
+                          >
+                            {page}
+                          </Button>
+                        );
+                      });
+                    })()}
                   </div>
 
                   <Button
@@ -640,6 +703,47 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
           documentId={selectedOcrDocument.id}
           documentName={selectedOcrDocument.name}
         />
+      )}
+
+      {/* Category Selection Modal */}
+      {categoryModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-lg shadow-xl max-w-md w-full p-6"
+          >
+            <h3 className="text-lg font-semibold mb-4">
+              Изменить категорию
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Выбрано документов: {selectedDocuments.length}
+            </p>
+
+            <div className="space-y-2 mb-6">
+              {filters?.categories.map((category) => (
+                <Button
+                  key={category.value}
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => handleChangeCategory(category.value)}
+                >
+                  <span className="mr-2">{category.icon}</span>
+                  {category.label}
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setCategoryModalOpen(false)}
+              >
+                Отмена
+              </Button>
+            </div>
+          </motion.div>
+        </div>
       )}
     </Card>
   );
