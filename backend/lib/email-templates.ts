@@ -5,7 +5,7 @@
  * Шаблоны для документов, отчётов и дедлайнов с единым стилем
  */
 
-import type { NotificationType, NotificationPriority } from './notification-service';
+import { NotificationType, NotificationPriority } from './notification-service';
 
 export interface EmailTemplateData {
   subject: string;
@@ -31,28 +31,34 @@ class EmailTemplates {
    */
   createTemplate(data: NotificationEmailData): EmailTemplateData {
     switch (data.type) {
-      case 'DOCUMENT_UPLOADED':
+      case NotificationType.DOCUMENT_UPLOADED:
         return this.createDocumentUploadedTemplate(data);
 
-      case 'DOCUMENT_PROCESSED':
+      case NotificationType.DOCUMENT_PROCESSED:
         return this.createDocumentProcessedTemplate(data);
 
-      case 'DOCUMENT_ERROR':
+      case NotificationType.DOCUMENT_ERROR:
         return this.createDocumentErrorTemplate(data);
 
-      case 'REPORT_READY':
+      case NotificationType.REPORT_READY:
         return this.createReportReadyTemplate(data);
 
-      case 'REPORT_ERROR':
+      case NotificationType.REPORT_ERROR:
         return this.createReportErrorTemplate(data);
 
-      case 'DEADLINE_30_DAYS':
-      case 'DEADLINE_7_DAYS':
-      case 'DEADLINE_1_DAY':
+      case NotificationType.DEADLINE_30_DAYS:
+      case NotificationType.DEADLINE_7_DAYS:
+      case NotificationType.DEADLINE_1_DAY:
         return this.createDeadlineTemplate(data);
 
-      case 'SYSTEM_ALERT':
+      case NotificationType.SYSTEM_ALERT:
         return this.createSystemAlertTemplate(data);
+
+      case NotificationType.TRIAL_REQUEST_APPROVED:
+        return this.createTrialApprovedTemplate(data);
+
+      case NotificationType.TRIAL_REQUEST_REJECTED:
+        return this.createTrialRejectedTemplate(data);
 
       default:
         return this.createGenericTemplate(data);
@@ -682,6 +688,137 @@ ${options.content}
     if (days === 1) return 'день';
     if (days >= 2 && days <= 4) return 'дня';
     return 'дней';
+  }
+
+  /**
+   * Шаблон: Заявка на доступ одобрена
+   */
+  private createTrialApprovedTemplate(data: NotificationEmailData): EmailTemplateData {
+    const userMode = data.metadata?.userMode || 'TRIAL';
+    const trialDays = data.metadata?.trialDurationDays || 14;
+    const expiryDate = data.metadata?.expiryDate 
+      ? new Date(data.metadata.expiryDate).toLocaleDateString('ru-RU')
+      : 'не ограничено';
+
+    return {
+      subject: '✅ ESG-Лайт: Ваша заявка на доступ одобрена!',
+      html: this.wrapHtml({
+        icon: '🎉',
+        title: 'Ваша заявка одобрена!',
+        color: '#059669',
+        content: `
+          <h2>Поздравляем! Ваша заявка одобрена</h2>
+          <p>${data.message}</p>
+
+          <div class="info-box" style="background: #d1fae5; border-color: #059669;">
+            <strong>📋 Детали доступа:</strong><br>
+            • Режим: ${userMode === 'TRIAL' ? `Пробный (${trialDays} ${this.getDaysWord(trialDays)})` : 'Полный доступ'}<br>
+            ${userMode === 'TRIAL' ? `• Срок действия: до ${expiryDate}<br>` : ''}
+            • Доступ к функциям: Загрузка документов, OCR обработка, создание отчётов 296-ФЗ
+          </div>
+
+          <p><strong>🚀 Что вы можете сделать сейчас:</strong></p>
+          <ul>
+            <li>Загрузить документы для обработки</li>
+            <li>Автоматически извлечь данные через OCR</li>
+            <li>Создать отчёты по 296-ФЗ</li>
+            <li>Использовать аналитику и экспорт данных</li>
+          </ul>
+
+          ${userMode === 'TRIAL' ? `
+          <p><strong>⏰ Важно:</strong> Ваш пробный доступ действует ${trialDays} ${this.getDaysWord(trialDays)}. 
+          Если вам понадобится больше времени или расширенные возможности, обратитесь к менеджеру.</p>
+          ` : ''}
+
+          <a href="${this.baseUrl}/dashboard" class="button">Начать работу</a>
+        `
+      }),
+      text: this.wrapText({
+        subject: '✅ Ваша заявка на доступ одобрена!',
+        content: `
+Поздравляем! Ваша заявка на доступ к ESG-Лайт одобрена.
+
+Детали доступа:
+• Режим: ${userMode === 'TRIAL' ? `Пробный (${trialDays} ${this.getDaysWord(trialDays)})` : 'Полный доступ'}
+${userMode === 'TRIAL' ? `• Срок действия: до ${expiryDate}` : ''}
+• Доступ к функциям: Загрузка документов, OCR обработка, создание отчётов 296-ФЗ
+
+Что вы можете сделать сейчас:
+• Загрузить документы для обработки
+• Автоматически извлечь данные через OCR
+• Создать отчёты по 296-ФЗ
+• Использовать аналитику и экспорт данных
+
+Начать работу: ${this.baseUrl}/dashboard
+        `.trim()
+      })
+    };
+  }
+
+  /**
+   * Шаблон: Заявка на доступ отклонена
+   */
+  private createTrialRejectedTemplate(data: NotificationEmailData): EmailTemplateData {
+    const rejectionReason = data.metadata?.rejectionReason || 'Не указана';
+    const adminNotes = data.metadata?.adminNotes;
+
+    return {
+      subject: '❌ ESG-Лайт: Ваша заявка на доступ отклонена',
+      html: this.wrapHtml({
+        icon: '❌',
+        title: 'Заявка отклонена',
+        color: '#dc2626',
+        content: `
+          <h2>К сожалению, ваша заявка отклонена</h2>
+          <p>${data.message}</p>
+
+          <div class="info-box" style="background: #fee2e2; border-color: #dc2626;">
+            <strong>📋 Причина отклонения:</strong><br>
+            ${rejectionReason}
+          </div>
+
+          ${adminNotes ? `
+          <div class="info-box">
+            <strong>💬 Комментарий администратора:</strong><br>
+            ${adminNotes}
+          </div>
+          ` : ''}
+
+          <p><strong>🤔 Что делать дальше?</strong></p>
+          <ul>
+            <li>Проверьте правильность указанных данных</li>
+            <li>Убедитесь, что ваша организация соответствует требованиям</li>
+            <li>Свяжитесь с нашей службой поддержки для уточнения деталей</li>
+            <li>Вы можете подать новую заявку с исправленными данными</li>
+          </ul>
+
+          <p>Если у вас есть вопросы, напишите нам на <a href="mailto:support@esg-lite.ru">support@esg-lite.ru</a></p>
+
+          <a href="${this.baseUrl}/pricing" class="button">Подать новую заявку</a>
+        `
+      }),
+      text: this.wrapText({
+        subject: '❌ ESG-Лайт: Ваша заявка на доступ отклонена',
+        content: `
+К сожалению, ваша заявка на доступ к ESG-Лайт отклонена.
+
+Причина отклонения:
+${rejectionReason}
+
+${adminNotes ? `Комментарий администратора:\n${adminNotes}\n` : ''}
+
+Что делать дальше?
+• Проверьте правильность указанных данных
+• Убедитесь, что ваша организация соответствует требованиям
+• Свяжитесь с нашей службой поддержки для уточнения деталей
+• Вы можете подать новую заявку с исправленными данными
+
+Если у вас есть вопросы, напишите нам на support@esg-lite.ru
+
+Подать новую заявку: ${this.baseUrl}/pricing
+        `.trim()
+      })
+    };
   }
 }
 

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
-import { Toaster } from './components/ui/toaster'
+import { Toaster } from './components/ui/sonner'
 import { Providers } from './providers'
 
 export const metadata: Metadata = {
@@ -15,8 +15,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="ru">
-      <body>
+    <html lang="ru" suppressHydrationWarning>
+      <body className="bg-gray-950 text-gray-100" suppressHydrationWarning>
         <Providers>
           {children}
           <Toaster />

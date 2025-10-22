@@ -295,20 +295,28 @@ function getYandexVisionService(): YandexVisionService {
 export async function processImageWithYandex(buffer: Buffer): Promise<OcrResult> {
   try {
     const service = getYandexVisionService();
-    
-    // Определяем MIME тип по сигнатуре
+
+    // Определяем MIME тип по сигнатуре файла
     let mimeType = 'image/jpeg';
     if (buffer.length > 8) {
       const header = buffer.toString('hex', 0, 8);
-      if (header.startsWith('89504e47')) {
+      if (header.startsWith('25504446')) {
+        // PDF signature: %PDF
+        mimeType = 'application/pdf';
+      } else if (header.startsWith('89504e47')) {
+        // PNG signature
         mimeType = 'image/png';
       } else if (header.startsWith('47494638')) {
+        // GIF signature
         mimeType = 'image/gif';
       } else if (header.startsWith('424d')) {
+        // BMP signature
         mimeType = 'image/bmp';
       }
     }
-    
+
+    console.log(`📄 [Yandex Vision] Detected MIME type: ${mimeType}`);
+
     return await service.recognizeText(buffer, mimeType);
   } catch (error: any) {
     throw new Error(`YANDEX_VISION_OCR_FAILED: ${error.message}`);

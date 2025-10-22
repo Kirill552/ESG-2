@@ -392,6 +392,9 @@ export async function GET(req: NextRequest) {
         updatedAt: true,
         processingProgress: true,
         processingMessage: true,
+        ocrData: true, // Добавлено для транспортных данных
+        extractedINN: true, // ИНН извлеченный из документа
+        innMatches: true, // Совпадение ИНН с организацией
       },
       orderBy,
       skip: (page - 1) * pageSize,

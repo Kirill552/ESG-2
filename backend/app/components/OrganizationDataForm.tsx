@@ -267,27 +267,39 @@ export function OrganizationDataForm({
           </div>
         </div>
 
-        <div className="flex justify-end space-x-2 pt-4 border-t">
-          <Button variant="outline" onClick={onClose} disabled={saving}>
-            Отмена
-          </Button>
+        <div className="flex justify-between items-center pt-4 border-t">
           <Button
-            onClick={handleSave}
-            disabled={saving || !formData.ogrn || !formData.kpp || !formData.okved || !formData.fullName || !formData.legalAddress || !formData.directorName || !formData.directorPosition}
-            className="bg-[#1dc962] hover:bg-[#1dc962]/90"
+            variant="ghost"
+            onClick={() => {
+              window.location.href = '/settings?tab=organization';
+            }}
+            disabled={saving}
+            className="text-[#1dc962] hover:text-[#1dc962]/90 hover:bg-[#1dc962]/10"
           >
-            {saving ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Сохранение...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                Сохранить и создать отчет
-              </>
-            )}
+            Перейти в настройки
           </Button>
+          <div className="flex space-x-2">
+            <Button variant="outline" onClick={onClose} disabled={saving}>
+              Отмена
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saving || !formData.ogrn || !formData.kpp || !formData.okved || !formData.fullName || !formData.legalAddress || !formData.directorName || !formData.directorPosition}
+              className="bg-[#1dc962] hover:bg-[#1dc962]/90"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Сохранение...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Сохранить и создать отчет
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

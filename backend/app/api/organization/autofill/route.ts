@@ -151,6 +151,9 @@ export async function POST(req: NextRequest) {
       inn: companyData.inn,
       kpp: companyData.kpp || null,
       ogrn: companyData.ogrn || null,
+      okpo: companyData.okpo || null, // ✅ Добавлено для 296-ФЗ
+      oktmo: companyData.oktmo || null, // ✅ Добавлено для 296-ФЗ
+      okato: companyData.okato || null, // ✅ Добавлено для 296-ФЗ
       okved: companyData.okvedCode || null,
       legalAddress: companyData.address || null,
       phone: companyData.phone || null,

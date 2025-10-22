@@ -60,9 +60,7 @@ export async function GET(request: NextRequest) {
               gte: new Date(),
               lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 дней от сегодня
             },
-            status: {
-              in: ['DRAFT', 'READY'] // Только незавершенные отчеты
-            }
+            status: 'READY' // Все отчеты имеют статус READY
           }
         })
       ]);

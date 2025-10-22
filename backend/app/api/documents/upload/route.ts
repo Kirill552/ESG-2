@@ -98,10 +98,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Получаем пользователя из БД
+    // Получаем пользователя из БД с организацией
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      select: { id: true, mode: true }
+      select: {
+        id: true,
+        mode: true,
+        organization: {
+          select: {
+            id: true,
+            canUploadDocuments: true,
+            documentsPerMonth: true,
+            isBlocked: true
+          }
+        }
+      }
     });
 
     if (!user) {
@@ -112,6 +123,58 @@ export async function POST(req: NextRequest) {
         },
         { status: 404 }
       );
+    }
+
+    // Проверяем доступ организации к загрузке документов
+    if (user.organization) {
+      // Проверяем блокировку организации
+      if (user.organization.isBlocked) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: "Организация заблокирована. Обратитесь в службу поддержки.",
+          },
+          { status: 403 }
+        );
+      }
+
+      // Проверяем флаг доступа к загрузке документов
+      if (!user.organization.canUploadDocuments) {
+        return NextResponse.json(
+          {
+            ok: false,
+            message: "Загрузка документов недоступна для вашей организации. Обратитесь к администратору.",
+          },
+          { status: 403 }
+        );
+      }
+
+      // Проверяем лимит документов в месяц (если установлен)
+      if (user.organization.documentsPerMonth > 0) {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+        const documentsThisMonth = await prisma.document.count({
+          where: {
+            userId: user.id,
+            createdAt: {
+              gte: startOfMonth,
+              lte: endOfMonth,
+            },
+          },
+        });
+
+        if (documentsThisMonth >= user.organization.documentsPerMonth) {
+          return NextResponse.json(
+            {
+              ok: false,
+              message: `Достигнут лимит загрузки документов (${user.organization.documentsPerMonth} в месяц). Обратитесь к администратору для увеличения лимита.`,
+            },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Проверяем, что пользователь имеет доступ к загрузке
@@ -259,25 +322,66 @@ export async function POST(req: NextRequest) {
 
     // ✅ Добавляем задачу в очередь OCR для автоматической обработки
     try {
+      logger.info("🔄 Getting pg-boss instance for OCR queue");
       const boss = await getBoss();
-      await boss.send('ocr-processing', {
-        documentId: document.id,
-        userId: user.id,
-        filePath: s3Url,
-        fileName: file.name,
-        fileType: file.type,
-        category: category
+
+      // Проверяем состояние pg-boss
+      logger.info("📊 pg-boss state check", {
+        isStarted: boss ? 'instance exists' : 'no instance',
       });
 
-      logger.info("Document added to OCR queue", {
+      // Используем правильную структуру OcrJobData из pg-boss-config.ts
+      const jobData = {
         documentId: document.id,
         userId: user.id,
+        fileKey: fileKey,           // S3 ключ файла
+        fileName: file.name,         // Оригинальное имя
+        mimeType: file.type,         // MIME тип
+        fileSize: file.size,         // Размер в байтах
+        category: category,
+        userMode: user.mode
+      };
+
+      // v11: Создаем очередь если еще не существует
+      await boss.createQueue('ocr-processing');
+
+      logger.info("📤 Sending job to OCR queue", {
+        queueName: 'ocr-processing',
+        documentId: document.id,
+        fileKey: fileKey,
         fileName: file.name
       });
+
+      // Отправляем задачу с опциями (pg-boss v11)
+      const jobId = await boss.send('ocr-processing', jobData, {
+        retryLimit: 3,
+        retryDelay: 60,
+        expireInSeconds: 3600 // v11 использует секунды вместо часов!
+      });
+
+      if (jobId) {
+        logger.info("✅ Document added to OCR queue successfully", {
+          documentId: document.id,
+          userId: user.id,
+          fileName: file.name,
+          jobId,
+          queueName: 'ocr-processing'
+        });
+      } else {
+        logger.error("⚠️ boss.send returned null jobId", undefined, {
+          documentId: document.id,
+          fileName: file.name,
+          queueName: 'ocr-processing'
+        });
+      }
     } catch (queueError) {
-      logger.error("Failed to add document to OCR queue",
+      logger.error("❌ Failed to add document to OCR queue",
         queueError instanceof Error ? queueError : undefined,
-        { documentId: document.id }
+        {
+          documentId: document.id,
+          error: queueError instanceof Error ? queueError.message : String(queueError),
+          stack: queueError instanceof Error ? queueError.stack : undefined
+        }
       );
       // Не прерываем выполнение, если не удалось добавить в очередь
       // Пользователь может обработать документ вручную позже

@@ -11,6 +11,7 @@ export const QUEUE_NAMES = {
   CLEANUP: 'file-cleanup',
 } as const;
 
+// pg-boss v11 совместимый интерфейс
 export interface OcrJobData {
   documentId: string;
   userId: string;
@@ -46,40 +47,98 @@ export interface EmailJobData {
   text?: string;
 }
 
+// Singleton для pg-boss
+let bossInstance: PgBoss | null = null;
+
 /**
- * Создает и настраивает экземпляр pg-boss
+ * Получает экземпляр pg-boss (singleton)
  */
-export async function createPgBoss(): Promise<PgBoss> {
+export async function getBoss(): Promise<PgBoss> {
+  if (bossInstance) {
+    console.log('♻️  Используем существующий экземпляр pg-boss');
+    return bossInstance;
+  }
+
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
     throw new Error('DATABASE_URL не установлена в переменных окружения');
   }
 
-  const boss = new PgBoss({
+  console.log('🔧 Создаем новый экземпляр pg-boss...');
+  console.log('📡 DATABASE_URL:', connectionString.replace(/:[^:@]+@/, ':****@')); // Скрываем пароль
+
+  bossInstance = new PgBoss({
     connectionString,
-    // Настройки для production
+
+    // pg-boss v11: явно указываем схему
+    schema: 'pgboss',
+
+    // Настройки пула подключений
     max: 10, // максимум подключений в пуле
-    retryLimit: 3, // количество попыток при ошибке
-    retryDelay: 60, // задержка между попытками в секундах
-    expireInHours: 1, // время жизни задачи (макс 24 часа, ставим 1)
-    retentionDays: 7, // хранить завершенные задачи 7 дней
-    deleteAfterDays: 30, // окончательное удаление через 30 дней
 
-    // Настройки мониторинга
+    // Настройки задач (v11 использует секунды вместо часов)
+    retryLimit: 3,
+    retryDelay: 60,
+    expireInSeconds: 3600, // 1 час (в v11 используем секунды!)
+    retentionDays: 7,
+    deleteAfterDays: 30,
+
+    // Мониторинг и обслуживание
     monitorStateIntervalSeconds: 60,
-    maintenanceIntervalSeconds: 300, // 5 минут
+    maintenanceIntervalSeconds: 300,
 
-    // SSL для подключения через туннель
+    // Архивирование
+    archiveCompletedAfterSeconds: 3600,
+
+    // SSL настройки
     ssl: connectionString.includes('sslmode=require') ? {
       rejectUnauthorized: false
     } : false
   });
 
-  await boss.start();
-  console.log('✅ pg-boss подключен и запущен');
+  console.log('🚀 Запускаем pg-boss и создаем схему...');
 
-  return boss;
+  try {
+    await bossInstance.start();
+    console.log('✅ pg-boss подключен и запущен');
+
+    // Проверяем, что можем создать задачу (тест работоспособности v11)
+    console.log('🧪 Проверяем работоспособность очереди (pg-boss v11)...');
+
+    // v11 требует явного создания очереди перед отправкой задач
+    await bossInstance.createQueue('test-queue');
+
+    const testJobId = await bossInstance.send('test-queue', { test: 'data' }, {
+      retryLimit: 0,
+      expireInSeconds: 60 // v11 использует секунды!
+    });
+
+    if (testJobId) {
+      console.log(`✅ Тестовая задача создана успешно: ${testJobId}`);
+      // Сразу удаляем тестовую задачу
+      await bossInstance.cancel(testJobId).catch(() => {});
+    } else {
+      console.error('⚠️ КРИТИЧЕСКАЯ ОШИБКА: boss.send() вернул null!');
+      console.error('⚠️ Возможные причины:');
+      console.error('   1. Нет прав на создание схемы pgboss');
+      console.error('   2. Схема pgboss уже существует с неправильной версией');
+      console.error('   3. Проблемы с подключением к БД');
+    }
+  } catch (startError) {
+    console.error('❌ Ошибка запуска pg-boss:', startError);
+    throw startError;
+  }
+
+  return bossInstance;
+}
+
+/**
+ * Создает и настраивает экземпляр pg-boss (deprecated, используй getBoss)
+ * @deprecated Используй getBoss() вместо этого
+ */
+export async function createPgBoss(): Promise<PgBoss> {
+  return getBoss();
 }
 
 /**

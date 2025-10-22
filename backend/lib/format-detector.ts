@@ -111,10 +111,10 @@ export class FormatDetector {
     console.log(`🔍 Format Detector: analyzing ${filename} (${buffer.length} bytes, ext: ${extension})`);
 
     // 1. Проверка по MIME типу (если предоставлен)
-    if (mimeType && MIME_TYPES[mimeType]) {
-      const format = MIME_TYPES[mimeType] as any;
+    if (mimeType && mimeType in MIME_TYPES) {
+      const format = MIME_TYPES[mimeType as keyof typeof MIME_TYPES] as FileFormatInfo['format'];
       console.log(`🔍 Format Detector: MIME type suggests ${format}`);
-      
+
       const info = this.createFormatInfo(format, 0.9, { subFormat: extension });
       if (opts.strictMode || info.confidence > 0.8) {
         return info;
@@ -384,16 +384,31 @@ export class FormatDetector {
    * Создает объект информации о формате
    */
   private static createFormatInfo(
-    format: FileFormatInfo['format'], 
-    confidence: number, 
+    format: FileFormatInfo['format'],
+    confidence: number,
     extra: Partial<FileFormatInfo> = {}
   ): FileFormatInfo {
     const characteristics = this.getFormatCharacteristics(format);
-    
+
+    // Определяем стратегию по умолчанию
+    let priority = ProcessingPriority.OCR;
+    if (characteristics.hasStructure && !characteristics.requiresOcr) {
+      priority = ProcessingPriority.STRUCTURAL;
+    } else if (characteristics.isTextBased && !characteristics.requiresOcr) {
+      priority = ProcessingPriority.TEXTUAL;
+    }
+
     return {
       format,
+      extension: '',
+      type: format,
       confidence: Math.min(confidence, 0.99),
       characteristics,
+      strategy: {
+        priority,
+        minConfidence: 0.3,
+        timeoutMs: 30000
+      },
       ...extra
     };
   }
@@ -436,24 +451,27 @@ export class FormatDetector {
       return null;
     }
 
-    const parserMap = {
+    const parserMap: Record<string, string> = {
       // Структурированные форматы (приоритет 1)
       csv: 'CsvTsvParser',
       tsv: 'CsvTsvParser',
       excel: 'ExcelParser',
       json: 'JsonParser',
       xml: 'XmlParser',
-      
+
       // Текстовые форматы (приоритет 2)
       txt: 'TxtParser',
       html: 'HtmlParser',
       office: 'OfficeParser',
       docx: 'OfficeParser',
-      odt: 'OfficeParser', 
+      odt: 'OfficeParser',
       rtf: 'RtfParser',
-      
+
       // PDF форматы (приоритет 3)
-      pdf: 'PdfParser'
+      pdf: 'PdfParser',
+
+      // Unknown
+      unknown: 'TxtParser'
     };
 
     return parserMap[formatInfo.format] || null;
@@ -468,30 +486,29 @@ export class FormatDetector {
     requiresOcr: boolean;
     processingPriority: 'structural' | 'textual' | 'ocr';
   } {
+    let processingPriority: 'structural' | 'textual' | 'ocr' = 'ocr';
+
+    // Определяем приоритет обработки и fallback стратегии
+    if (formatInfo.characteristics.hasStructure && !formatInfo.characteristics.requiresOcr) {
+      processingPriority = 'structural';
+    } else if (formatInfo.characteristics.isTextBased && !formatInfo.characteristics.requiresOcr) {
+      processingPriority = 'textual';
+    }
+
     const strategy = {
       primaryParser: this.getRecommendedParser(formatInfo),
       fallbackParsers: [] as string[],
       requiresOcr: formatInfo.characteristics.requiresOcr,
-      processingPriority: 'ocr' as const
+      processingPriority
     };
 
-    // Определяем приоритет обработки и fallback стратегии
-    if (formatInfo.characteristics.hasStructure && !formatInfo.characteristics.requiresOcr) {
-      // Структурированные форматы - наивысший приоритет
-      strategy.processingPriority = 'structural';
-      strategy.fallbackParsers = ['TxtParser']; // fallback на текстовый если не парсится
-      
-    } else if (formatInfo.characteristics.isTextBased && !formatInfo.characteristics.requiresOcr) {
-      // Текстовые форматы - средний приоритет
-      strategy.processingPriority = 'textual';
-      strategy.fallbackParsers = ['TxtParser']; // простой текстовый fallback
-      
+    // Определяем fallback стратегии
+    if (processingPriority === 'structural') {
+      strategy.fallbackParsers = ['TxtParser'];
+    } else if (processingPriority === 'textual') {
+      strategy.fallbackParsers = ['TxtParser'];
     } else {
-      // OCR требуется - низкий приоритет
-      strategy.processingPriority = 'ocr';
-      strategy.fallbackParsers = [];
-      
-      // Для PDF пробуем сначала извлечь текст, потом OCR
+      // OCR требуется
       if (formatInfo.format === 'pdf') {
         strategy.fallbackParsers = ['MultiLevelOcrService'];
       }

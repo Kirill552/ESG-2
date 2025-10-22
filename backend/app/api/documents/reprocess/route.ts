@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth-options";
 import prisma from "@/lib/prisma";
 import { Logger } from "@/lib/logger";
 import { getCurrentUserMode } from "@/lib/user-mode-utils";
+import { getBoss } from "@/lib/pg-boss-config";
 
 const logger = new Logger("documents-reprocess-api");
 
@@ -119,8 +120,13 @@ export async function POST(req: NextRequest) {
       where: whereCondition,
       select: {
         id: true,
-        fileName: true,
+        fileName: true,       // S3 key
+        originalName: true,
+        filePath: true,       // Полный S3 URL
+        fileSize: true,       // Размер файла
+        fileType: true,       // MIME тип
         status: true,
+        category: true,
         processingMessage: true
       }
     });
@@ -169,8 +175,27 @@ export async function POST(req: NextRequest) {
 
         results.queued = updateResult.count;
 
-        // TODO: Здесь добавить документы в очередь OCR обработки
-        // await addDocumentsToProcessingQueue(reprocessableDocuments.map(d => d.id));
+        // Добавляем документы в очередь OCR обработки
+        const boss = await getBoss();
+        for (const doc of reprocessableDocuments) {
+          // Используем правильную структуру OcrJobData из pg-boss-config.ts
+          await boss.send('ocr-processing', {
+            documentId: doc.id,
+            userId: user.id,
+            fileKey: doc.fileName,              // S3 ключ
+            fileName: doc.originalName || doc.fileName,
+            mimeType: doc.fileType || 'application/octet-stream',
+            fileSize: doc.fileSize || 0,
+            category: doc.category,
+            userMode: user.mode
+          });
+          logger.info("✅ Document queued for reprocessing", {
+            documentId: doc.id,
+            fileName: doc.originalName || doc.fileName,
+            fileKey: doc.fileName,
+            category: doc.category
+          });
+        }
 
         logger.info("Documents queued for reprocessing", {
           userId: user.id,

@@ -1,4 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Layout } from './Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
@@ -12,12 +13,20 @@ import { Textarea } from './ui/textarea';
 import { Alert, AlertDescription } from './ui/alert';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { OrganizationDataForm } from './OrganizationDataForm';
-import { ReportViewer } from './ReportViewer';
+import { ValidationModal } from './ValidationModal';
+import { toast } from 'sonner';
+
+// Динамический импорт ReportViewer только на клиенте (избегаем SSR ошибок с PDF.js)
+const ReportViewer = dynamic(() => import('./ReportViewer').then(mod => ({ default: mod.ReportViewer })), {
+  ssr: false,
+  loading: () => <div className="flex items-center justify-center p-8">Загрузка просмотра отчета...</div>
+});
 import {
   Plus,
   Download,
   Eye,
   Edit3,
+  Trash2,
   FileText,
   Calendar,
   CheckCircle,
@@ -73,12 +82,12 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
     warnings?: string[];
   } | null>(null);
   const [showMissingFieldsForm, setShowMissingFieldsForm] = useState(false);
+  const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
   const [viewerState, setViewerState] = useState<{
     isOpen: boolean;
     reportId: string;
     reportName: string;
     reportFormat: 'pdf' | 'xml';
-    mode: 'view' | 'edit';
   } | null>(null);
 
   // Загрузка отчетов и статистики
@@ -126,8 +135,7 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
       isOpen: true,
       reportId: report.id,
       reportName: report.name,
-      reportFormat: 'pdf', // TODO: получать из report.format
-      mode: 'view'
+      reportFormat: 'pdf' // TODO: получать из report.format
     });
   };
 
@@ -149,23 +157,62 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+
+      // Показываем toast-уведомление об успехе
+      toast.success('Отчёт скачан', {
+        description: `Файл "${report.name}.pdf" сохранён на ваш компьютер`,
+        duration: 3000,
+      });
     } catch (err) {
       console.error('Error downloading report:', err);
-      alert('Ошибка при скачивании отчета');
+      toast.error('Ошибка при скачивании отчета', {
+        description: 'Не удалось скачать файл. Попробуйте ещё раз',
+      });
     }
   };
 
-  // Редактирование отчета
-  const handleEditReport = (report: Report) => {
-    setViewerState({
-      isOpen: true,
-      reportId: report.id,
-      reportName: report.name,
-      reportFormat: 'pdf', // TODO: получать из report.format
-      mode: 'edit'
-    });
+  // Удаление отчета
+  const handleDeleteReport = async (report: Report) => {
+    if (!confirm(`Вы уверены, что хотите удалить отчёт "${report.name}"?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/reports/${report.id}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        throw new Error('Не удалось удалить отчёт');
+      }
+
+      // Перезагружаем список отчётов
+      fetchReportsData();
+
+      // Показываем toast-уведомление об успехе
+      toast.success('Отчёт успешно удалён', {
+        description: `Отчёт "${report.name}" удалён из системы`,
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error('Ошибка при удалении отчёта:', error);
+      toast.error('Ошибка при удалении отчёта', {
+        description: 'Не удалось удалить отчёт. Попробуйте ещё раз',
+      });
+    }
   };
 
+  // Редактирование отчета - переход на отдельную страницу
+  const handleEditReport = (report: Report) => {
+    window.location.href = `/reports/${report.id}/edit`;
+  };
+
+  // Открываем ValidationModal перед созданием отчета
+  const handleInitiateReportCreation = () => {
+    setIsValidationModalOpen(true);
+  };
+
+  // Фактическое создание отчета (после успешной валидации)
   const handleCreateReport = async () => {
     try {
       setCreating(true);
@@ -209,11 +256,19 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
       setIsCreateDialogOpen(false);
       resetForm();
 
+      toast.success('Отчёт успешно создан', {
+        description: `Отчёт "${newReport.name}" готов к работе`,
+        duration: 3000,
+      });
+
       // Обновляем статистику
       fetchReportsData();
     } catch (err) {
       console.error('Error creating report:', err);
       setError(err instanceof Error ? err.message : 'Ошибка создания отчета');
+      toast.error('Ошибка создания отчета', {
+        description: err instanceof Error ? err.message : 'Попробуйте ещё раз',
+      });
     } finally {
       setCreating(false);
     }
@@ -468,7 +523,7 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                     Отмена
                   </Button>
                   <Button
-                    onClick={handleCreateReport}
+                    onClick={handleInitiateReportCreation}
                     disabled={creating || !reportPeriod}
                     className="bg-[#1dc962] hover:bg-[#1dc962]/90"
                   >
@@ -689,20 +744,26 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
                             size="sm"
                             onClick={() => handleDownloadReport(report)}
                             title="Скачать отчет"
-                            disabled={report.status === 'draft'}
                           >
                             <Download className="w-4 h-4" />
                           </Button>
-                          {report.status === 'draft' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleEditReport(report)}
-                              title="Редактировать отчет"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </Button>
-                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditReport(report)}
+                            title="Редактировать отчет"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteReport(report)}
+                            title="Удалить отчет"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -750,13 +811,23 @@ export function Reports({ onNavigate, onLogout }: ReportsProps) {
         </div>
       </div>
 
+      {/* Validation Modal */}
+      <ValidationModal
+        isOpen={isValidationModalOpen}
+        onClose={() => setIsValidationModalOpen(false)}
+        onContinue={handleCreateReport}
+        onNavigateToSettings={(url) => {
+          onNavigate('settings');
+          setIsValidationModalOpen(false);
+        }}
+      />
+
       {/* Report Viewer/Editor */}
       {viewerState?.isOpen && (
         <ReportViewer
           reportId={viewerState.reportId}
           reportName={viewerState.reportName}
           reportFormat={viewerState.reportFormat}
-          mode={viewerState.mode}
           onClose={() => {
             setViewerState(null);
             fetchReportsData(); // Обновляем список после закрытия

@@ -19,7 +19,10 @@ import {
   AlertTriangle,
   Loader2,
   Clock,
-  Tag
+  Tag,
+  CheckCircle2,
+  XCircle,
+  HelpCircle
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -45,6 +48,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { useDocuments, Document } from '@/lib/hooks/useDocuments';
 import { useToast } from '@/lib/hooks/use-toast';
 import OcrResultModal from './OcrResultModal';
+import { TransportDataModal } from './TransportDataModal';
 import { getFileTypeLabel } from '@/lib/file-type-labels';
 
 interface DocumentsTableProps {
@@ -61,6 +65,8 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
   const [ocrModalOpen, setOcrModalOpen] = useState(false);
   const [selectedOcrDocument, setSelectedOcrDocument] = useState<{ id: string; name: string } | null>(null);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [transportModalOpen, setTransportModalOpen] = useState(false);
+  const [selectedTransportDocument, setSelectedTransportDocument] = useState<{ id: string; name: string } | null>(null);
 
   const { toast } = useToast();
 
@@ -211,6 +217,20 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
     setSelectedOcrDocument(null);
   }, []);
 
+  const handleEditTransportData = useCallback((document: Document) => {
+    setSelectedTransportDocument({ id: document.id, name: document.displayName });
+    setTransportModalOpen(true);
+  }, []);
+
+  const handleCloseTransportModal = useCallback(() => {
+    setTransportModalOpen(false);
+    setSelectedTransportDocument(null);
+  }, []);
+
+  const handleTransportDataUpdated = useCallback(() => {
+    refresh();
+  }, [refresh]);
+
   const handleChangeCategory = useCallback(async (newCategory: string) => {
     if (selectedDocuments.length === 0) return;
 
@@ -287,6 +307,46 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
           className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
+      </div>
+    );
+  };
+
+  const INNIndicator = ({ extractedINN, innMatches }: { extractedINN?: string | null; innMatches?: boolean | null }) => {
+    if (!extractedINN) {
+      return (
+        <div className="flex items-center gap-1 text-gray-400 text-xs" title="ИНН не обнаружен в документе">
+          <HelpCircle className="w-3 h-3" />
+          <span>Нет ИНН</span>
+        </div>
+      );
+    }
+
+    if (innMatches === true) {
+      return (
+        <div className="flex items-center gap-1 text-green-600 text-xs" title={`ИНН совпадает: ${extractedINN}`}>
+          <CheckCircle2 className="w-3 h-3" />
+          <span className="font-mono">{extractedINN}</span>
+        </div>
+      );
+    }
+
+    if (innMatches === false) {
+      return (
+        <div className="flex flex-col gap-0.5">
+          <div className="flex items-center gap-1 text-red-600 text-xs" title="ИНН не совпадает с вашей организацией">
+            <XCircle className="w-3 h-3" />
+            <span className="font-mono">{extractedINN}</span>
+          </div>
+          <span className="text-[10px] text-red-500">Чужой документ</span>
+        </div>
+      );
+    }
+
+    // innMatches === null - ИНН организации не указан
+    return (
+      <div className="flex items-center gap-1 text-amber-600 text-xs" title={`ИНН найден: ${extractedINN}, но ИНН организации не указан`}>
+        <HelpCircle className="w-3 h-3" />
+        <span className="font-mono">{extractedINN}</span>
       </div>
     );
   };
@@ -459,6 +519,7 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                     <TableHead className="w-24">Тип</TableHead>
                     <TableHead>Размер</TableHead>
                     <TableHead>Статус</TableHead>
+                    <TableHead className="w-32">ИНН</TableHead>
                     <TableHead>Категория</TableHead>
                     <TableHead>Дата загрузки</TableHead>
                     <TableHead className="w-12"></TableHead>
@@ -528,6 +589,51 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                               {document.processingMessage}
                             </p>
                           )}
+                          {/* Индикация транспортных данных */}
+                          {document.category === 'TRANSPORT' && document.transportData && document.status === 'PROCESSED' && (
+                            <div className="mt-2 text-xs text-gray-600 space-y-0.5">
+                              {document.transportData.vehicle?.fuelType && (
+                                <div className="flex items-center gap-1">
+                                  <span>
+                                    {document.transportData.vehicle.fuelType.fuelType === 'gasoline' && '⛽'}
+                                    {document.transportData.vehicle.fuelType.fuelType === 'diesel' && '🔋'}
+                                    {document.transportData.vehicle.fuelType.fuelType === 'gas' && '💨'}
+                                  </span>
+                                  <span className="capitalize">
+                                    {document.transportData.vehicle.fuelType.fuelType === 'gasoline' && 'Бензин'}
+                                    {document.transportData.vehicle.fuelType.fuelType === 'diesel' && 'Дизель'}
+                                    {document.transportData.vehicle.fuelType.fuelType === 'gas' && 'Газ'}
+                                  </span>
+                                  {document.transportData.vehicle.fuelType.confidence < 0.8 && (
+                                    <span className="text-amber-600">
+                                      ({Math.round(document.transportData.vehicle.fuelType.confidence * 100)}%)
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {document.transportData.route?.distance && (
+                                <div>📏 {Math.round(document.transportData.route.distance.distance)} км</div>
+                              )}
+                              {document.transportData.emissions && (
+                                <div>☁️ {document.transportData.emissions.toFixed(3)} т CO₂</div>
+                              )}
+                              {document.transportData.vehicle?.fuelType && document.transportData.vehicle.fuelType.confidence < 0.7 && (
+                                <button
+                                  onClick={() => handleEditTransportData(document)}
+                                  className="text-blue-600 hover:text-blue-800 underline text-xs"
+                                >
+                                  💡 Уточнить данные
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </TableCell>
+
+                        <TableCell>
+                          <INNIndicator
+                            extractedINN={document.extractedINN}
+                            innMatches={document.innMatches}
+                          />
                         </TableCell>
 
                         <TableCell>
@@ -565,6 +671,12 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
                                 <DropdownMenuItem onClick={() => handleViewOcr(document)}>
                                   <Eye className="w-4 h-4 mr-2" />
                                   Просмотр OCR
+                                </DropdownMenuItem>
+                              )}
+                              {document.category === 'TRANSPORT' && document.status === 'PROCESSED' && (
+                                <DropdownMenuItem onClick={() => handleEditTransportData(document)}>
+                                  <Edit className="w-4 h-4 mr-2" />
+                                  Уточнить транспортные данные
                                 </DropdownMenuItem>
                               )}
                               {document.hasError && (
@@ -702,6 +814,17 @@ export function DocumentsTable({ className = '' }: DocumentsTableProps) {
           onClose={handleCloseOcrModal}
           documentId={selectedOcrDocument.id}
           documentName={selectedOcrDocument.name}
+        />
+      )}
+
+      {/* Transport Data Modal */}
+      {selectedTransportDocument && (
+        <TransportDataModal
+          isOpen={transportModalOpen}
+          onClose={handleCloseTransportModal}
+          documentId={selectedTransportDocument.id}
+          documentName={selectedTransportDocument.name}
+          onUpdate={handleTransportDataUpdated}
         />
       )}
 

@@ -12,6 +12,7 @@ import { Separator } from './ui/separator';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { startRegistration } from '@simplewebauthn/browser';
+import { toast } from 'sonner';
 import {
   User,
   Building,
@@ -42,18 +43,18 @@ interface SettingsProps {
 export function Settings({ onNavigate, onLogout }: SettingsProps) {
   // Состояния для форм
   const [profileData, setProfileData] = useState({
-    firstName: 'Иван',
-    lastName: 'Петров',
-    email: 'ivan.petrov@company.ru',
-    phone: '+7 (999) 123-45-67',
-    position: 'Эколог'
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    position: ''
   });
 
   const [organizationData, setOrganizationData] = useState({
-    name: 'ООО «ЭкоТех»',
-    inn: '7700123456',
-    kpp: '770001001',
-    address: '123456, г. Москва, ул. Примерная, д. 1',
+    name: '',
+    inn: '',
+    kpp: '',
+    address: '',
     industry: 'manufacturing',
     // Дополнительные поля для 296-ФЗ
     ogrn: '',
@@ -71,15 +72,13 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
 
   const [innAutofillLoading, setInnAutofillLoading] = useState(false);
 
-  const [contacts, setContacts] = useState([
-    {
-      id: 'demo-contact-1',
-      name: 'Иван Петров',
-      position: 'Главный эколог',
-      email: 'ivan.petrov@company.ru',
-      isPrimary: true
-    }
-  ]);
+  const [contacts, setContacts] = useState<Array<{
+    id: string;
+    name: string;
+    position: string;
+    email: string;
+    isPrimary: boolean;
+  }>>([]);
 
   const [loading, setLoading] = useState({
     profile: false,
@@ -394,12 +393,34 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
       const result = await response.json();
 
       if (response.ok && result.ok) {
-        // Показать уведомление об успехе
-        console.log('Профиль сохранен успешно');
+        // Показать toast уведомление об успехе
+        toast.success('Профиль успешно сохранен', {
+          description: 'Ваши личные данные обновлены',
+          duration: 3000,
+        });
+
+        // Создать уведомление в колокольчике
+        await fetch('/api/notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'profile_updated',
+            title: 'Профиль обновлен',
+            message: 'Ваши личные данные успешно сохранены',
+          }),
+        });
       } else {
+        toast.error('Ошибка сохранения профиля', {
+          description: result.message || 'Попробуйте еще раз',
+        });
         console.error('Ошибка сохранения профиля:', result.message);
       }
     } catch (error) {
+      toast.error('Ошибка при сохранении профиля', {
+        description: 'Проверьте подключение к интернету',
+      });
       console.error('Ошибка при сохранении профиля:', error);
     } finally {
       setLoading(prev => ({ ...prev, profile: false }));
@@ -437,16 +458,37 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
       const result = await response.json();
 
       if (response.ok && result.ok) {
-        // Показать уведомление об успехе
+        // Показать toast уведомление об успехе
+        toast.success('Данные организации успешно сохранены', {
+          description: 'Информация о вашей организации обновлена',
+          duration: 3000,
+        });
+
+        // Создать уведомление в колокольчике
+        await fetch('/api/notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'organization_updated',
+            title: 'Организация обновлена',
+            message: 'Данные вашей организации успешно сохранены',
+          }),
+        });
+
         console.log('Данные организации сохранены успешно');
-        alert('Данные организации успешно сохранены!');
       } else {
+        toast.error('Ошибка сохранения организации', {
+          description: result.message || 'Попробуйте еще раз',
+        });
         console.error('Ошибка сохранения организации:', result.message);
-        alert('Ошибка сохранения: ' + (result.message || 'Неизвестная ошибка'));
       }
     } catch (error) {
+      toast.error('Ошибка при сохранении организации', {
+        description: 'Проверьте подключение к интернету',
+      });
       console.error('Ошибка при сохранении организации:', error);
-      alert('Ошибка при сохранении организации');
     } finally {
       setLoading(prev => ({ ...prev, organization: false }));
     }

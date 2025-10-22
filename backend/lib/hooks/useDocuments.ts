@@ -12,6 +12,34 @@ export interface DocumentMetadata {
   bgColor: string;
 }
 
+export interface TransportData {
+  vehicle?: {
+    model?: string;
+    licensePlate?: string;
+    fuelType?: {
+      fuelType: 'diesel' | 'gasoline' | 'gas';
+      confidence: number;
+      reasoning?: string;
+    };
+  };
+  route?: {
+    from?: string;
+    to?: string;
+    distance?: {
+      distance: number;
+      distanceSource?: string;
+      confidence?: number;
+    };
+  };
+  emissions?: number;
+  fuelConsumed?: number;
+  userOverride?: {
+    fuelType?: string;
+    yearOfManufacture?: number;
+    actualConsumption?: number;
+  };
+}
+
 export interface Document {
   id: string;
   fileName: string;
@@ -33,6 +61,10 @@ export interface Document {
   hasError: boolean;
   isCompleted: boolean;
   progressPercent: number;
+  ocrData?: any; // Полные данные OCR
+  transportData?: TransportData; // Извлеченные транспортные данные
+  extractedINN?: string | null; // ИНН извлеченный из документа через OCR
+  innMatches?: boolean | null; // Совпадает ли extractedINN с ИНН организации
 }
 
 export interface DocumentsResponse {

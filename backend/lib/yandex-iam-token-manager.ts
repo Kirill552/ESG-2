@@ -208,7 +208,8 @@ let globalTokenManager: YandexIAMTokenManager | null = null;
 
 export function getTokenManager(): YandexIAMTokenManager {
   if (!globalTokenManager) {
-    globalTokenManager = new YandexIAMTokenManager();
+    const keyFilePath = process.env.YANDEX_SERVICE_ACCOUNT_KEY_FILE || './authorized_key.json';
+    globalTokenManager = new YandexIAMTokenManager(keyFilePath);
   }
   return globalTokenManager;
 }

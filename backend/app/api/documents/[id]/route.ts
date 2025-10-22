@@ -258,14 +258,35 @@ export async function DELETE(
       );
     }
 
+    // Удаляем задачи из pg-boss очереди (если есть jobId)
+    const docWithJob = await prisma.document.findUnique({
+      where: { id: document.id },
+      select: { jobId: true }
+    });
+
+    if (docWithJob?.jobId) {
+      try {
+        const { getBoss } = await import('@/lib/pg-boss-config');
+        const boss = await getBoss();
+        await boss.cancel(docWithJob.jobId);
+        logger.info("Cancelled pg-boss job", { jobId: docWithJob.jobId, documentId: document.id });
+      } catch (jobError) {
+        logger.warn("Failed to cancel pg-boss job", { error: jobError, jobId: docWithJob.jobId });
+        // Не прерываем удаление документа, если не удалось удалить задачу
+      }
+    }
+
     // Удаляем запись из БД
     await prisma.document.delete({
       where: { id: document.id }
     });
 
-    // TODO: Удалить физический файл
-    // if (document.filePath && existsSync(document.filePath)) {
-    //   await unlink(document.filePath);
+    // TODO: Удалить физический файл из S3
+    // try {
+    //   const { deleteFile } = await import('@/lib/s3');
+    //   await deleteFile(document.fileName);
+    // } catch (s3Error) {
+    //   logger.warn("Failed to delete file from S3", { error: s3Error });
     // }
 
     logger.info("Document deleted successfully", {

@@ -71,7 +71,14 @@ export async function POST(request: NextRequest) {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         include: {
-          organization: true,
+          organization: {
+            select: {
+              name: true,
+              inn: true,
+              canUseAnalytics: true,
+              isBlocked: true,
+            },
+          },
           documents: {
             where: {
               status: 'PROCESSED',
@@ -91,7 +98,22 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Организация опциональна - API работает с данными пользователя или без организации
+      // Проверяем доступ организации к аналитике
+      if (user.organization) {
+        if (user.organization.isBlocked) {
+          return NextResponse.json(
+            { error: 'Организация заблокирована. Обратитесь в службу поддержки.' },
+            { status: 403 }
+          );
+        }
+
+        if (!user.organization.canUseAnalytics) {
+          return NextResponse.json(
+            { error: 'Аналитика недоступна для вашей организации. Обратитесь к администратору.' },
+            { status: 403 }
+          );
+        }
+      }
 
       // Получаем отчеты за период
       const reports = await prisma.report.findMany({
@@ -114,8 +136,8 @@ export async function POST(request: NextRequest) {
           exportDate: new Date().toISOString(),
           period,
           dataType,
-          organizationName: user.organization.name,
-          organizationInn: user.organization.inn,
+          organizationName: user.organization?.name || '',
+          organizationInn: user.organization?.inn || '',
           userMode: 'PAID',
           totalReports: reports.length,
           readyReports: readyReports.length,
@@ -128,7 +150,7 @@ export async function POST(request: NextRequest) {
     if (format === 'xlsx') {
       const buffer = generateExcelFile(exportData, dataType, includeCharts, includeCompliance);
 
-      return new NextResponse(buffer, {
+      return new NextResponse(buffer as any, {
         headers: {
           'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           'Content-Disposition': `attachment; filename="ESG_Analytics_${period}_${new Date().toISOString().split('T')[0]}.xlsx"`

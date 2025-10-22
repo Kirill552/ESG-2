@@ -126,7 +126,12 @@ export async function GET(request: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        organization: true,
+        organization: {
+          select: {
+            canUseAnalytics: true,
+            isBlocked: true,
+          },
+        },
         documents: {
           where: {
             status: 'PROCESSED',
@@ -146,7 +151,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Организация опциональна - API работает с данными пользователя или без организации
+    // Проверяем доступ организации к аналитике
+    if (user.organization) {
+      if (user.organization.isBlocked) {
+        return NextResponse.json(
+          { error: 'Организация заблокирована. Обратитесь в службу поддержки.' },
+          { status: 403 }
+        );
+      }
+
+      if (!user.organization.canUseAnalytics) {
+        return NextResponse.json(
+          { error: 'Аналитика недоступна для вашей организации. Обратитесь к администратору.' },
+          { status: 403 }
+        );
+      }
+    }
 
     // Получаем отчеты за выбранный год
     const reports = await prisma.report.findMany({

@@ -144,6 +144,8 @@ model Document {
   ocrProcessed          Boolean        @default(false)
   ocrData               Json?
   ocrConfidence         Float?
+  extractedINN          String? // ИНН извлеченный из документа через OCR
+  innMatches            Boolean?       @default(false) // Совпадает ли extractedINN с ИНН организации
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
   processingProgress    Int?           @default(0)
@@ -174,6 +176,9 @@ model Document {
   @@index([batchId])
   @@index([createdAt])
   @@index([updatedAt])
+  @@index([extractedINN])
+  @@index([innMatches])
+  @@index([userId, innMatches])
   @@map("documents")
 }
 
@@ -187,8 +192,10 @@ model Report {
   fileName          String
   filePath          String
   fileSize          Int?
-  status            ReportStatus       @default(DRAFT) // draft, ready, submitted, approved
+  status            ReportStatus       @default(READY) // ready, submitted, approved
   period            String?            // Отчетный период (например, "2024", "Q1 2025")
+  reportPeriodStart DateTime?          // Начало отчетного периода (например, 01.01.2024)
+  reportPeriodEnd   DateTime?          // Конец отчетного периода (например, 31.12.2024)
   submissionDeadline DateTime?         // Дедлайн подачи
   totalEmissions    Float?             // Общие выбросы в тСО₂
   documentCount     Int                @default(0) // Количество связанных документов
@@ -323,6 +330,18 @@ model AdminUser {
   role                AdminRole                 @default(SUPPORT_ADMIN)
   isActive            Boolean                   @default(true)
   totpSecret          String?
+
+  // Telegram bot настройки
+  telegramBotToken    String?
+  telegramEnabled     Boolean                   @default(false)
+
+  // Настройки уведомлений (какие события отправлять в Telegram)
+  notifyTrialRequests Boolean                   @default(true)
+  notifyUserErrors    Boolean                   @default(true)
+  notifySystemErrors  Boolean                   @default(true)
+  notifyPayments      Boolean                   @default(false)
+  notifySecurityIssues Boolean                  @default(true)
+
   createdAt           DateTime                  @default(now())
   updatedAt           DateTime                  @updatedAt
   sessions            AdminSession[]
@@ -524,6 +543,29 @@ model Organization {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   auditLogs AuditLog[]
+
+  // Система доступов и ограничений (15.5)
+  // Флаги доступа к функциям
+  canUploadDocuments Boolean @default(true)
+  canUseOCR          Boolean @default(true)
+  canGenerate296FZ   Boolean @default(true)
+  canGenerateCBAM    Boolean @default(false)
+  canExportData      Boolean @default(true)
+  canUseAnalytics    Boolean @default(true)
+
+  // Численные лимиты (0 = без ограничений)
+  documentsPerMonth  Int @default(0)
+  reportsPerMonth    Int @default(0)
+  ocrPagesPerMonth   Int @default(0)
+  storageQuotaMB     Int @default(0)
+  usersPerOrg        Int @default(0)
+
+  // Темпоральные ограничения
+  accessExpiresAt DateTime? // Дата истечения доступа
+  autoExtendTrial Boolean   @default(false) // Автопродление trial
+
+  // Заметки администратора
+  adminNotes String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -812,8 +854,7 @@ enum ReportType {
 }
 
 enum ReportStatus {
-  DRAFT      // Черновик
-  READY      // Готов
+  READY      // Готов (отчет создается сразу в готовом состоянии)
   // SUBMITTED  // Отправлен - TODO: для будущих улучшений (отправка в регулятор)
   // APPROVED   // Утвержден - TODO: для будущих улучшений (подтверждение от регулятора)
 }

@@ -130,7 +130,12 @@ export async function GET(request: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        organization: true,
+        organization: {
+          select: {
+            canUseAnalytics: true,
+            isBlocked: true,
+          },
+        },
         documents: {
           where: { status: 'PROCESSED' }
         }
@@ -144,7 +149,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Организация опциональна - API работает с данными пользователя или без организации
+    // Проверяем доступ организации к аналитике
+    if (user.organization) {
+      if (user.organization.isBlocked) {
+        return NextResponse.json(
+          { error: 'Организация заблокирована. Обратитесь в службу поддержки.' },
+          { status: 403 }
+        );
+      }
+
+      if (!user.organization.canUseAnalytics) {
+        return NextResponse.json(
+          { error: 'Аналитика недоступна для вашей организации. Обратитесь к администратору.' },
+          { status: 403 }
+        );
+      }
+    }
 
     // Получаем отчеты пользователя
     const reports = await prisma.report.findMany({
@@ -255,7 +275,7 @@ function calculateTimelySubmission(currentYearReports: any[]) {
   const daysToDeadline = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
   const readyReports = currentYearReports.filter(r => r.status === 'READY').length;
-  const pendingReports = currentYearReports.filter(r => r.status === 'DRAFT').length;
+  const pendingReports = 0; // Нет черновиков, все отчеты создаются как READY
 
   let status = 'В срок';
   let level = 'good';

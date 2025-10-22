@@ -105,8 +105,7 @@ export async function GET(req: NextRequest) {
             directorName: true,
             directorPosition: true,
           }
-        },
-        website: true,
+        }
       }
     });
 

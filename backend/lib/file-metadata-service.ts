@@ -91,6 +91,12 @@ export const DOCUMENT_STATUS_METADATA = {
     bgColor: '#F3F4F6', // gray-100
     icon: '⬆️'
   },
+  'QUEUED': {
+    label: 'В очереди',
+    color: '#3B82F6', // blue-500
+    bgColor: '#DBEAFE', // blue-100
+    icon: '🔄'
+  },
   'PROCESSING': {
     label: 'Обрабатывается',
     color: '#F59E0B', // amber-500
@@ -104,7 +110,7 @@ export const DOCUMENT_STATUS_METADATA = {
     icon: '✅'
   },
   'FAILED': {
-    label: 'Ошибка',
+    label: 'Ошибка распознавания',
     color: '#DC2626', // red-600
     bgColor: '#FEE2E2', // red-100
     icon: '❌'
@@ -199,6 +205,18 @@ export function enrichDocumentWithMetadata(document: any) {
   const statusMetadata = getStatusMetadata(document.status);
   const categoryMetadata = getCategoryMetadata(document.category);
 
+  // Извлекаем транспортные данные из ocrData если документ из категории "Транспорт"
+  let transportData = null;
+  if (document.category === 'TRANSPORT' && document.ocrData) {
+    const ocrData = typeof document.ocrData === 'string'
+      ? JSON.parse(document.ocrData)
+      : document.ocrData;
+
+    if (ocrData.transportData) {
+      transportData = ocrData.transportData;
+    }
+  }
+
   return {
     ...document,
     fileSize: typeof document.fileSize === 'number' ? document.fileSize : parseInt(document.fileSize),
@@ -211,7 +229,9 @@ export function enrichDocumentWithMetadata(document: any) {
     isProcessing: document.status === 'PROCESSING',
     hasError: document.status === 'FAILED',
     isCompleted: document.status === 'PROCESSED',
-    progressPercent: document.processingProgress || 0
+    progressPercent: document.processingProgress || 0,
+    // Транспортные данные (только для категории TRANSPORT)
+    transportData: transportData
   };
 }
 

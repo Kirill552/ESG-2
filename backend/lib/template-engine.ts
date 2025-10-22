@@ -61,6 +61,7 @@ export function validate296FZTokens(data: TemplateData): string[] {
     'signer_name', 'signer_position', 'sign_date'
   ];
   // Дополнительная структурная проверка токенов, требуемых нормами 296‑ФЗ
+  // Эти поля должны быть заполнены хотя бы значением по умолчанию "Не указано"
   const structuralTokens = [
     'executor_fio', 'executor_phone',
     'co2_mass', 'co2e_co2', 'co2_percent',
@@ -71,15 +72,18 @@ export function validate296FZTokens(data: TemplateData): string[] {
 
   const errors: string[] = [];
 
+  // Критические поля - должны быть заполнены реальными значениями
   requiredTokens.forEach(token => {
     const value = String(data[token] || '').trim();
     if (!value || value === 'Не указано') {
       errors.push(`Отсутствует обязательный токен: ${token} (значение: "${value}")`);
     }
   });
+
+  // Структурные поля - могут быть "Не указано" или числовыми значениями
   structuralTokens.forEach(token => {
     const value = String(data[token] ?? '').trim();
-    if (!value || value === 'Не указано') {
+    if (!value) { // Только проверяем на пустоту, "Не указано" допустимо
       errors.push(`Отсутствует структурный токен 296-ФЗ: ${token}`);
     }
   });

@@ -9,18 +9,49 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 const DEBUG = process.env.DEBUG_S3 === 'true';
 const log = (...args: any[]) => DEBUG && console.log('🗄️ S3:', ...args);
 
-// Конфигурация S3 клиента для Yandex Cloud
-const s3Client = new S3Client({
-  region: process.env.YC_REGION || 'ru-central1',
-  endpoint: process.env.YC_S3_ENDPOINT || 'https://storage.yandexcloud.net',
-  credentials: {
-    accessKeyId: process.env.YC_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.YC_SECRET_ACCESS_KEY!,
-  },
-  forcePathStyle: true, // Важно для Yandex Cloud
-});
+// Ленивая инициализация S3 клиента (создается при первом использовании)
+let s3ClientInstance: S3Client | null = null;
 
-const bucketName = process.env.YC_BUCKET_NAME!;
+const getS3Client = () => {
+  if (!s3ClientInstance) {
+    const accessKeyId = process.env.YC_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.YC_SECRET_ACCESS_KEY;
+    const region = process.env.YC_REGION || 'ru-central1';
+    const endpoint = process.env.YC_S3_ENDPOINT || 'https://storage.yandexcloud.net';
+
+    console.log('🔧 [S3 INIT] Initializing S3 Client...');
+    console.log('🔧 [S3 INIT] Region:', region);
+    console.log('🔧 [S3 INIT] Endpoint:', endpoint);
+    console.log('🔧 [S3 INIT] Access Key ID:', accessKeyId ? `${accessKeyId.substring(0, 10)}...` : '❌ NOT SET');
+    console.log('🔧 [S3 INIT] Secret Key:', secretAccessKey ? '✅ present' : '❌ NOT SET');
+
+    if (!accessKeyId || !secretAccessKey) {
+      throw new Error('YC_ACCESS_KEY_ID and YC_SECRET_ACCESS_KEY environment variables must be set');
+    }
+
+    s3ClientInstance = new S3Client({
+      region,
+      endpoint,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+      forcePathStyle: true, // Важно для Yandex Cloud
+    });
+
+    console.log('✅ [S3 INIT] S3 Client initialized successfully');
+  }
+  return s3ClientInstance;
+};
+
+// Читаем bucket name динамически, чтобы поддерживать загрузку .env в runtime
+const getBucketName = () => {
+  const bucket = process.env.YC_BUCKET_NAME;
+  if (!bucket) {
+    throw new Error('YC_BUCKET_NAME environment variable is not set');
+  }
+  return bucket;
+};
 
 /**
  * Скачивание файла из Yandex Object Storage
@@ -28,13 +59,13 @@ const bucketName = process.env.YC_BUCKET_NAME!;
 export async function getFileBuffer(fileKey: string): Promise<{ buffer: Buffer; mime: string }> {
   try {
     log(`Downloading file from S3: ${fileKey}`);
-    
+
     const command = new GetObjectCommand({
-      Bucket: bucketName,
+      Bucket: getBucketName(),
       Key: fileKey,
     });
-    
-    const response = await s3Client.send(command);
+
+    const response = await getS3Client().send(command);
     
     if (!response.Body) {
       throw new Error('Empty response body from S3');
@@ -69,21 +100,22 @@ export async function getFileBuffer(fileKey: string): Promise<{ buffer: Buffer; 
 export async function uploadFile(fileKey: string, buffer: Buffer, contentType: string): Promise<string> {
   try {
     log(`Uploading file to S3: ${fileKey}, size: ${buffer.length} bytes`);
-    
+
+    const bucket = getBucketName();
     const command = new PutObjectCommand({
-      Bucket: bucketName,
+      Bucket: bucket,
       Key: fileKey,
       Body: buffer,
       ContentType: contentType,
       ContentLength: buffer.length,
     });
-    
-    await s3Client.send(command);
-    
+
+    await getS3Client().send(command);
+
     log(`File uploaded successfully: ${fileKey}`);
-    
+
     // Возвращаем public URL (если bucket публичный) или генерируем signed URL
-    return `https://${bucketName}.storage.yandexcloud.net/${fileKey}`;
+    return `https://${bucket}.storage.yandexcloud.net/${fileKey}`;
     
   } catch (error: any) {
     log('S3 upload failed:', error.message);
@@ -97,11 +129,11 @@ export async function uploadFile(fileKey: string, buffer: Buffer, contentType: s
 export async function getSignedDownloadUrl(fileKey: string, expiresIn: number = 3600): Promise<string> {
   try {
     const command = new GetObjectCommand({
-      Bucket: bucketName,
+      Bucket: getBucketName(),
       Key: fileKey,
     });
-    
-    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn });
+
+    const signedUrl = await getSignedUrl(getS3Client(), command, { expiresIn });
     
     log(`Generated signed URL for ${fileKey}, expires in ${expiresIn}s`);
     
@@ -119,12 +151,12 @@ export async function getSignedDownloadUrl(fileKey: string, expiresIn: number = 
 export async function getSignedUploadUrl(fileKey: string, contentType: string, expiresIn: number = 3600): Promise<string> {
   try {
     const command = new PutObjectCommand({
-      Bucket: bucketName,
+      Bucket: getBucketName(),
       Key: fileKey,
       ContentType: contentType,
     });
-    
-    const signedUrl = await getSignedUrl(s3Client, command, { expiresIn });
+
+    const signedUrl = await getSignedUrl(getS3Client(), command, { expiresIn });
     
     log(`Generated signed upload URL for ${fileKey}, expires in ${expiresIn}s`);
     
@@ -142,14 +174,14 @@ export async function getSignedUploadUrl(fileKey: string, contentType: string, e
 export async function deleteFile(fileKey: string): Promise<void> {
   try {
     log(`Deleting file from S3: ${fileKey}`);
-    
+
     const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
     const command = new DeleteObjectCommand({
-      Bucket: bucketName,
+      Bucket: getBucketName(),
       Key: fileKey,
     });
-    
-    await s3Client.send(command);
+
+    await getS3Client().send(command);
     
     log(`File deleted successfully: ${fileKey}`);
     
@@ -182,11 +214,11 @@ export async function fileExists(fileKey: string): Promise<boolean> {
   try {
     const { HeadObjectCommand } = await import('@aws-sdk/client-s3');
     const command = new HeadObjectCommand({
-      Bucket: bucketName,
+      Bucket: getBucketName(),
       Key: fileKey,
     });
-    
-    await s3Client.send(command);
+
+    await getS3Client().send(command);
     return true;
     
   } catch (error: any) {
@@ -208,11 +240,11 @@ export async function getFileMetadata(fileKey: string): Promise<{
   try {
     const { HeadObjectCommand } = await import('@aws-sdk/client-s3');
     const command = new HeadObjectCommand({
-      Bucket: bucketName,
+      Bucket: getBucketName(),
       Key: fileKey,
     });
-    
-    const response = await s3Client.send(command);
+
+    const response = await getS3Client().send(command);
     
     return {
       size: response.ContentLength || 0,

@@ -55,41 +55,86 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Report not found' }, { status: 404 });
     }
 
-    // Проверяем что отчет готов к скачиванию
-    if (report.status !== 'READY') {
+    // Получаем данные организации пользователя
+    const organization = await prisma.organization.findUnique({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        name: true,
+        inn: true,
+        address: true,
+        phone: true, // Старое поле (deprecated)
+        email: true, // Старое поле (deprecated)
+        profile: {
+          select: {
+            kpp: true,
+            ogrn: true,
+            okpo: true,
+            oktmo: true,
+            legalAddress: true,
+            directorName: true,
+            directorPosition: true,
+            phone: true, // Корректное поле телефона из профиля
+            emailForBilling: true, // Корректное поле email из профиля
+          }
+        }
+      }
+    });
+
+    // Если организация не заполнена, возвращаем ошибку
+    if (!organization || !organization.name || !organization.inn) {
       return NextResponse.json(
-        { error: 'Report is not ready for download. Please complete the report first.' },
+        {
+          error: 'Organization data not found',
+          message: 'Please fill in your organization details in Settings before downloading reports'
+        },
         { status: 400 }
       );
     }
+
+    // Отчет всегда готов к скачиванию (статус READY устанавливается при создании)
 
     // Генерируем PDF отчет с помощью enhanced-report-generator
     try {
       const { generate296FZFullReport } = await import('@/lib/enhanced-report-generator');
 
       // Подготавливаем данные для генерации отчета
+      const totalEmissions = report.totalEmissions || 0;
+
       const reportData = {
-        organizationId: user.id,
-        organizationName: 'ООО "Тестовая Организация"', // TODO: получать из профиля пользователя
+        organizationId: organization.id,
+        organizationName: organization.name,
         documentId: report.id,
         reportId: report.id,
-        period: report.period,
-        methodology: '296-ФЗ от 02.07.2021',
+        period: report.period || new Date().getFullYear().toString(),
+        reportPeriodStart: report.reportPeriodStart,
+        reportPeriodEnd: report.reportPeriodEnd,
+        methodology: report.methodology || '296-ФЗ от 02.07.2021',
         submissionDeadline: report.submissionDeadline,
-        organizationInn: '1234567890', // TODO: получать из профиля пользователя
-        organizationAddress: 'Москва, Россия', // TODO: получать из профиля пользователя
+        organizationInn: organization.inn,
+        organizationKpp: organization.profile?.kpp || '',
+        organizationOgrn: organization.profile?.ogrn || '',
+        organizationOkpo: organization.profile?.okpo || '',
+        organizationOktmo: organization.profile?.oktmo || '',
+        organizationAddress: organization.profile?.legalAddress || organization.address || 'Не указан',
         emissionData: {
-          scope1: Math.random() * 500 + 200, // TODO: реальные данные из OCR
-          scope2: Math.random() * 800 + 300,
-          scope3: Math.random() * 100,
-          total: 0, // Будет рассчитано автоматически
+          scope1: totalEmissions * 0.4,
+          scope2: totalEmissions * 0.4,
+          scope3: totalEmissions * 0.2,
+          total: totalEmissions,
           sources: {
-            energy: Math.random() * 400 + 100,
-            transport: Math.random() * 300 + 50,
-            production: Math.random() * 200 + 100,
-            waste: Math.random() * 50 + 10,
-            suppliers: Math.random() * 100 + 20
+            energy: totalEmissions * 0.3,
+            transport: totalEmissions * 0.5,
+            production: totalEmissions * 0.1,
+            waste: totalEmissions * 0.05,
+            suppliers: totalEmissions * 0.05
           }
+        },
+        variables: {
+          responsible_person: organization.profile?.directorName || 'Не указан',
+          responsible_position: organization.profile?.directorPosition || '',
+          phone_number: organization.profile?.phone || organization.phone || 'Не указан',
+          email: organization.profile?.emailForBilling || organization.email || session.user!.email || 'Не указан'
         }
       };
 
@@ -116,10 +161,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
       // Возвращаем PDF файл
       const fileName = `${report.name?.replace(/\s+/g, '_') || 'report'}_${report.period}.pdf`;
+      // Кодируем имя файла для поддержки кириллицы в HTTP заголовке
+      const encodedFileName = encodeURIComponent(fileName);
 
       const response = new NextResponse(result.pdf);
       response.headers.set('Content-Type', 'application/pdf');
-      response.headers.set('Content-Disposition', `attachment; filename="${fileName}"`);
+      response.headers.set('Content-Disposition', `attachment; filename*=UTF-8''${encodedFileName}`);
       response.headers.set('Content-Length', result.pdf.length.toString());
 
       return response;

@@ -28,7 +28,11 @@ export enum NotificationType {
   SYSTEM_ALERT = 'system_alert',
   SYSTEM_ERROR = 'system_error',
   USER_FEEDBACK = 'user_feedback',
-  ACCOUNT_UPDATE = 'account_update'
+  ACCOUNT_UPDATE = 'account_update',
+
+  // Заявки на доступ
+  TRIAL_REQUEST_APPROVED = 'trial_request_approved',
+  TRIAL_REQUEST_REJECTED = 'trial_request_rejected'
 }
 
 /**

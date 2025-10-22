@@ -134,15 +134,17 @@ export function computeTotalCO2eRaw(data: EmissionData): {
 
 /**
  * Форматирует число для отображения в отчете (русский формат)
+ * По требованиям 296-ФЗ: 3 знака после запятой
  */
 function formatNumber(value: number): string {
-  if (value === 0) return '0,0';
+  if (value === 0) return '0,000';
   if (value < 0.001) return '< 0,001';
 
   // Используем русскую локаль для форматирования с пробелами
+  // 3 знака после запятой для точности расчетов CO₂-эквивалента
   return value.toLocaleString('ru-RU', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 2
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3
   });
 }
 
@@ -184,7 +186,7 @@ export function generateEmissionData(baseData: any): EmissionData {
     n2o_mass: n2o_base,
     hfc_mass: 0, // Обычно 0 для большинства организаций
     pfc_mass: 0,
-    sf6_mass: 0.001 // Минимальные выбросы SF6
+    sf6_mass: 0  // Убрано моковое значение (только реальные данные)
   };
 }
 

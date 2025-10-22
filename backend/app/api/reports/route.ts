@@ -128,11 +128,66 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email: session.user!.email! },
-      select: { id: true }
+      select: {
+        id: true,
+        organization: {
+          select: {
+            id: true,
+            canGenerate296FZ: true,
+            reportsPerMonth: true,
+            isBlocked: true
+          }
+        }
+      }
     });
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // Проверяем доступ организации к генерации отчетов
+    if (user.organization) {
+      // Проверяем блокировку организации
+      if (user.organization.isBlocked) {
+        return NextResponse.json(
+          { error: 'Организация заблокирована. Обратитесь в службу поддержки.' },
+          { status: 403 }
+        );
+      }
+
+      // Проверяем флаг доступа к генерации отчетов 296-ФЗ
+      if (!user.organization.canGenerate296FZ) {
+        return NextResponse.json(
+          { error: 'Генерация отчетов 296-ФЗ недоступна для вашей организации. Обратитесь к администратору.' },
+          { status: 403 }
+        );
+      }
+
+      // Проверяем лимит отчетов в месяц (если установлен)
+      if (user.organization.reportsPerMonth > 0) {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+        const reportsThisMonth = await prisma.report.count({
+          where: {
+            userId: user.id,
+            createdAt: {
+              gte: startOfMonth,
+              lte: endOfMonth,
+            },
+          },
+        });
+
+        if (reportsThisMonth >= user.organization.reportsPerMonth) {
+          return NextResponse.json(
+            {
+              error: `Достигнут лимит генерации отчетов (${user.organization.reportsPerMonth} в месяц). Обратитесь к администратору для увеличения лимита.`,
+            },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Проверяем полноту данных организации перед созданием отчета 296-ФЗ
@@ -151,34 +206,70 @@ export async function POST(request: NextRequest) {
     }
 
     // Получаем обработанные документы пользователя для расчета выбросов
+    // Фильтруем по ИНН: включаем только документы где ИНН совпадает (true) или не распознан (null)
+    // Исключаем документы с чужим ИНН (innMatches: false)
     const processedDocuments = await prisma.document.findMany({
       where: {
         userId: user.id,
-        status: 'PROCESSED'
+        status: 'PROCESSED',
+        OR: [
+          { innMatches: true },   // Документы с совпадающим ИНН
+          { innMatches: null },   // Документы без распознанного ИНН
+        ]
       },
       select: {
         id: true,
-        extractedData: true
+        ocrData: true,
+        extractedINN: true,
+        innMatches: true
       }
     });
 
-    // Подсчитываем выбросы из документов (примерный расчет)
+    console.log(`📊 Отфильтровано документов для отчета: ${processedDocuments.length}`);
+    console.log(`   - С совпадающим ИНН: ${processedDocuments.filter(d => d.innMatches === true).length}`);
+    console.log(`   - Без ИНН: ${processedDocuments.filter(d => d.innMatches === null).length}`);
+
+    // Подсчитываем выбросы из документов
     let totalEmissions = 0;
     processedDocuments.forEach(doc => {
-      if (doc.extractedData && typeof doc.extractedData === 'object') {
-        const data = doc.extractedData as any;
-        // Ищем числовые значения, похожие на выбросы (тонны CO2)
-        if (data.emissions) totalEmissions += Number(data.emissions) || 0;
-        if (data.co2) totalEmissions += Number(data.co2) || 0;
-        if (data.carbon) totalEmissions += Number(data.carbon) || 0;
+      if (doc.ocrData && typeof doc.ocrData === 'object') {
+        const data = doc.ocrData as any;
+
+        // НОВАЯ ЛОГИКА: Проверяем данные транспорта из extractedData
+        if (data.extractedData?.transport?.analysis?.emissions) {
+          const transportEmissions = data.extractedData.transport.analysis.emissions.co2Emissions;
+          console.log(`🚗 Транспортные выбросы из документа ${doc.id}: ${transportEmissions} кг CO₂`);
+          totalEmissions += transportEmissions / 1000; // переводим кг в тонны
+        }
+        // СТАРАЯ ЛОГИКА: Ищем числовые значения в других полях (для других категорий)
+        else if (data.emissions) {
+          totalEmissions += Number(data.emissions) || 0;
+        }
+        else if (data.co2) {
+          totalEmissions += Number(data.co2) || 0;
+        }
+        else if (data.carbon) {
+          totalEmissions += Number(data.carbon) || 0;
+        }
+        // Проверяем структурированные данные из парсеров (Excel, CSV)
+        else if (data.extractedData?.fuel) {
+          // TODO: Рассчитать выбросы из данных о топливе
+          console.log(`⚠️ Обнаружены данные о топливе для документа ${doc.id}, но расчет выбросов еще не реализован`);
+        }
+        else {
+          console.warn(`⚠️ Документ ${doc.id} (${data.category || 'Неизвестно'}) не содержит данных о выбросах`);
+        }
       }
     });
 
-    // Если нет данных о выбросах, создаем демо-значение на основе количества документов
-    if (totalEmissions === 0 && processedDocuments.length > 0) {
-      // Примерный расчет: ~200 тонн на документ (для демонстрации)
-      totalEmissions = Math.round(processedDocuments.length * 200 + Math.random() * 100);
-    }
+    console.log(`📊 Общие выбросы для отчета: ${totalEmissions.toFixed(3)} тонн CO₂ из ${processedDocuments.length} документов`);
+
+    // Рассчитываем отчетный период (по умолчанию: календарный год)
+    const year = parseInt(period || new Date().getFullYear().toString());
+    const reportPeriodStart = new Date(year, 0, 1); // 1 января
+    const reportPeriodEnd = new Date(year, 11, 31, 23, 59, 59); // 31 декабря
+
+    console.log(`📅 Отчетный период: с ${reportPeriodStart.toLocaleDateString('ru-RU')} по ${reportPeriodEnd.toLocaleDateString('ru-RU')}`);
 
     // Создаем новый отчет
     const report = await prisma.report.create({
@@ -187,7 +278,9 @@ export async function POST(request: NextRequest) {
         name,
         reportType: reportType === 'annual' ? 'REPORT_296FZ' : 'REPORT_296FZ',
         period,
-        status: 'DRAFT',
+        reportPeriodStart,
+        reportPeriodEnd,
+        status: 'READY',
         format: 'pdf',
         fileName: `${name.replace(/\s+/g, '_')}.pdf`,
         filePath: '', // Будет заполнен при генерации
@@ -206,6 +299,8 @@ export async function POST(request: NextRequest) {
         reportType: true,
         status: true,
         period: true,
+        reportPeriodStart: true,
+        reportPeriodEnd: true,
         submissionDeadline: true,
         totalEmissions: true,
         documentCount: true,

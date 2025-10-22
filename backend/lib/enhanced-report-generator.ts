@@ -405,7 +405,7 @@ export async function generate296FZFullReport(
       n2o_mass,
       hfc_mass: 0,
       pfc_mass: 0,
-      sf6_mass: 0.001
+      sf6_mass: 0  // Убрано моковое значение 0.001 (было 23.5 тонн CO₂-экв)
     };
 
     const calculatedEmissions = calculateEmissions(emissionData);

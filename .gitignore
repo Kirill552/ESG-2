@@ -59,6 +59,25 @@ CLAUDE.md
 бекенд из прошлого mvp
 OCR-REPORTS.md
 ИЩЕМ.md
+ФИКС.md
+задачи.md
 cheko_api
 otchet-o-vybrosah-parnikovyh-gazov-obrazec-2025.xlsx
 Об утверждении перечня парниковых газов, в отношении которых осуществляется государственный учет выб.doc
+
+# Тестовые данные и документация разработки
+test_ttn/
+backend/test-reports/
+backend/docs/
+docs/*.pdf
+
+# OCR данные и модели
+eng.traineddata
+*.traineddata
+
+# SQL скрипты для разработки
+backend/clear-queue.sql
+backend/scripts/*.sql
+
+# Временные и публичные файлы
+backend/public/

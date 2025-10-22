@@ -1,5 +1,22 @@
 /**
- * Многоуровневая OCR система для EGS-Lite
+ * Многоуровневая OCR система для ESG-Лайт
+ *
+ * 📋 МАРШРУТИЗАЦИЯ ФОРМАТОВ (2025):
+ *
+ * ✅ Yandex Vision OCR (приоритет #1):
+ *    - PDF (до 20MB, до 300 страниц) ← ОСНОВНОЙ ФОРМАТ!
+ *    - JPEG, PNG, GIF, BMP
+ *    - Автоопределение формата по сигнатуре файла
+ *
+ * ⚠️ Tesseract OCR (fallback):
+ *    - ТОЛЬКО изображения: JPEG, PNG, GIF, BMP
+ *    - НЕ поддерживает PDF! (требует конвертации)
+ *
+ * 🔄 Foundation Models (постобработка через GLM-4.6):
+ *    - Level 2: Исправление OCR ошибок
+ *    - Level 3: Извлечение данных по Приказу 371
+ *    - Level 4: Классификация категорий (Function Calling)
+ *
  * Приоритет: Yandex Vision → Tesseract Fallback → будущий Donut слот
  */
 
@@ -23,32 +40,48 @@ interface OcrError {
   code?: string;
 }
 
+interface MultiLevelOcrOptions {
+  preferredSource?: 'auto' | 'yandex' | 'tesseract' | 'donut';
+  enableFallback?: boolean;
+  minConfidence?: number;
+}
+
 /**
  * Проверяет доступность Yandex Vision API
  */
 async function isYandexVisionAvailable(): Promise<boolean> {
   try {
     // Проверяем наличие необходимых переменных окружения
-    const hasServiceAccount = process.env.YANDEX_SERVICE_ACCOUNT_KEY_FILE || process.env.YANDEX_IAM_TOKEN;
-    const hasFolderId = process.env.YANDEX_FOLDER_ID;
-    
-    if (!hasServiceAccount || !hasFolderId) {
-      console.log('🔍 Yandex Vision: missing credentials, using fallback');
+    const serviceAccountPath = process.env.YANDEX_SERVICE_ACCOUNT_KEY_FILE;
+    const iamToken = process.env.YANDEX_IAM_TOKEN;
+    const folderId = process.env.YANDEX_FOLDER_ID;
+
+    console.log('🔍 [Yandex Vision Check] Service Account Path:', serviceAccountPath || 'NOT SET');
+    console.log('🔍 [Yandex Vision Check] IAM Token:', iamToken ? 'SET' : 'NOT SET');
+    console.log('🔍 [Yandex Vision Check] Folder ID:', folderId || 'NOT SET');
+
+    const hasServiceAccount = serviceAccountPath || iamToken;
+
+    if (!hasServiceAccount || !folderId) {
+      console.log('❌ Yandex Vision: missing credentials, using fallback');
       return false;
     }
 
     // Пытаемся загрузить модуль Yandex Vision
+    console.log('🔍 [Yandex Vision Check] Attempting to import yandex-vision-service...');
     const { processImageWithYandex } = await import('./yandex-vision-service');
-    
+
     // Проверяем что функция существует
     if (typeof processImageWithYandex === 'function') {
       console.log('✅ Yandex Vision available as primary OCR');
       return true;
     }
-    
+
+    console.log('❌ Yandex Vision: processImageWithYandex is not a function');
     return false;
-  } catch (error) {
-    console.log('🔍 Yandex Vision module not available, using fallback');
+  } catch (error: any) {
+    console.log('❌ Yandex Vision module not available:', error.message);
+    console.log('   Error stack:', error.stack?.split('\n')[0]);
     return false;
   }
 }
@@ -311,10 +344,11 @@ export async function getOcrStatus(): Promise<{
 }
 
 /**
- * Постобработка OCR текста через Foundation Models (Levels 3-5)
- * Level 3: Исправление ошибок OCR (GigaChat Lite)
- * Level 4: Извлечение структурированных данных (GigaChat Pro)
- * Level 5: Сложный анализ (GigaChat 2 MAX)
+ * Постобработка OCR текста через Foundation Models (Levels 2-4)
+ * Использует единую модель GLM-4.6 для всех операций (FOUNDATION_MODELS_DEFAULT_MODEL в env)
+ * Level 2: Исправление ошибок OCR
+ * Level 3: Извлечение структурированных данных
+ * Level 4: Классификация категорий (Function Calling + транспортные документы)
  */
 export async function postProcessWithFoundationModels(
   ocrText: string,
@@ -328,52 +362,201 @@ export async function postProcessWithFoundationModels(
   extractedData?: any;
   category?: string;
   categoryConfidence?: number;
+  subcategory?: string;
+  categoryReasoning?: string;
 }> {
   const result: {
     fixedText?: string;
     extractedData?: any;
     category?: string;
     categoryConfidence?: number;
+    subcategory?: string;
+    categoryReasoning?: string;
   } = {};
 
   try {
     const { FoundationModelsClient } = await import('./foundation-models-client');
     const client = new FoundationModelsClient();
 
-    // Level 3: Исправление ошибок OCR (опционально)
+    // Level 2: Исправление ошибок OCR (опционально)
     if (options?.fixErrors !== false) {
-      console.log('🔧 Level 3: Исправление ошибок OCR через GigaChat Lite...');
+      console.log('🔧 Level 2: Исправление ошибок OCR через Foundation Models...');
       try {
         result.fixedText = await client.fixOcrErrors(ocrText);
+        console.log('✅ Level 2: Ошибки OCR исправлены');
       } catch (error) {
-        console.error('⚠️ Level 3 failed, using original text:', error);
+        console.error('⚠️ Level 2 failed, using original text:', error);
         result.fixedText = ocrText;
       }
+    } else {
+      console.log('⏭️ Level 2: Исправление ошибок OCR отключено');
+      result.fixedText = ocrText;
     }
 
     const textForProcessing = result.fixedText || ocrText;
 
-    // Level 4: Извлечение данных (опционально)
+    // Level 3: Извлечение данных (опционально)
     if (options?.extractData !== false) {
-      console.log('📊 Level 4: Извлечение данных через GigaChat Pro...');
+      console.log('📊 Level 3: Извлечение данных через Foundation Models...');
       try {
         const extraction = await client.extractEnergyData(textForProcessing);
-        result.extractedData = extraction.extractedData;
+        // ✅ ИСПРАВЛЕНО: Мержим данные, не перезаписываем полностью
+        result.extractedData = {
+          ...result.extractedData,
+          ...extraction.extractedData
+        };
+        console.log('✅ Level 3: Данные извлечены');
+      } catch (error) {
+        console.error('⚠️ Level 3 failed:', error);
+      }
+    } else {
+      console.log('⏭️ Level 3: Извлечение данных отключено');
+    }
+
+    // Level 4: Классификация категории (опционально)
+    if (options?.classifyCategory !== false) {
+      console.log('🏷️ Level 4: Классификация категории через Foundation Models (Function Calling)...');
+      try {
+        // Используем новый метод с Function Calling для максимальной точности
+        const classification = await client.classifyDocumentCategoryWithTools(
+          textForProcessing,
+          undefined // fileName можно передать если доступно
+        );
+
+        // Маппинг категорий обратно в русские названия для совместимости
+        const categoryMapping: Record<string, string> = {
+          'PRODUCTION': 'Производство',
+          'SUPPLIERS': 'Поставщики',
+          'WASTE': 'Отходы',
+          'TRANSPORT': 'Транспорт',
+          'ENERGY': 'Энергия',
+          'OTHER': 'Прочее'
+        };
+
+        result.category = categoryMapping[classification.category] || 'Прочее';
+        result.categoryConfidence = classification.confidence;
+
+        // Сохраняем дополнительную информацию
+        if (classification.subcategory) {
+          result.subcategory = classification.subcategory;
+        }
+        if (classification.reasoning) {
+          result.categoryReasoning = classification.reasoning;
+        }
+
+        console.log(`✅ Level 4: Категория: ${result.category} (${(classification.confidence * 100).toFixed(1)}%)`);
+        if (classification.subcategory) {
+          console.log(`📝 Подкатегория: ${classification.subcategory}`);
+        }
+        console.log(`💭 Обоснование: ${classification.reasoning.substring(0, 100)}...`);
+
+        // НОВОЕ: Обработка транспортных документов (Задачи 10.2-10.6)
+        if (result.category === 'Транспорт') {
+          console.log('🚗 Обнаружен транспортный документ, запуск специализированной обработки...');
+
+          try {
+            // Извлекаем данные транспортного документа через GLM
+            let transportData = await client.extractTransportDocumentData(textForProcessing);
+
+            console.log('🔍 GLM: Извлеченные данные транспорта:', {
+              vehicle: {
+                model: transportData.vehicle.model || 'НЕ ИЗВЛЕЧЕНО',
+                licensePlate: transportData.vehicle.licensePlate || 'НЕ ИЗВЛЕЧЕНО',
+                confidence: transportData.vehicle.modelConfidence
+              },
+              route: {
+                fromCity: transportData.route.fromCity || 'НЕ ИЗВЛЕЧЕНО',
+                toCity: transportData.route.toCity || 'НЕ ИЗВЛЕЧЕНО',
+                from: transportData.route.from || 'НЕ ИЗВЛЕЧЕНО',
+                to: transportData.route.to || 'НЕ ИЗВЛЕЧЕНО'
+              },
+              cargo: transportData.cargo ? `${transportData.cargo.weight} ${transportData.cargo.unit}` : 'НЕ ИЗВЛЕЧЕНО',
+              confidence: transportData.confidence
+            });
+
+            // Если GLM не справился - пробуем regex fallback
+            if (!transportData.vehicle.model || !transportData.route.fromCity || !transportData.route.toCity) {
+              console.log('⚠️ GLM не извлек полные данные, пробуем regex fallback...');
+
+              const { extractTransportDataRegex, isValidTransportData } = await import('./transport-regex-extractor');
+              const regexData = extractTransportDataRegex(textForProcessing);
+
+              // Если regex нашел больше данных - используем его результат
+              if (isValidTransportData(regexData)) {
+                console.log('✅ Regex fallback успешно извлек данные!');
+                transportData = regexData;
+              } else if (regexData.confidence > transportData.confidence) {
+                console.log('⚙️ Regex fallback частично улучшил результат');
+                // Мержим лучшие результаты от GLM и regex
+                transportData = {
+                  vehicle: {
+                    model: transportData.vehicle.model || regexData.vehicle.model,
+                    licensePlate: transportData.vehicle.licensePlate || regexData.vehicle.licensePlate,
+                    modelConfidence: Math.max(transportData.vehicle.modelConfidence, regexData.vehicle.modelConfidence)
+                  },
+                  route: {
+                    from: transportData.route.from || regexData.route.from,
+                    to: transportData.route.to || regexData.route.to,
+                    fromCity: transportData.route.fromCity || regexData.route.fromCity,
+                    toCity: transportData.route.toCity || regexData.route.toCity
+                  },
+                  cargo: transportData.cargo || regexData.cargo,
+                  confidence: Math.max(transportData.confidence, regexData.confidence)
+                };
+              }
+            }
+
+            // Если данные успешно извлечены, обрабатываем параллельно
+            if (transportData.vehicle.model && transportData.route.fromCity && transportData.route.toCity) {
+              console.log('✅ Минимальные требования выполнены, запускаем параллельную обработку...');
+
+              // Импортируем процессор транспортных документов
+              const { processTransportDocumentParallel } = await import('./transport-document-processor');
+
+              // Параллельная обработка (определение топлива + расчет расстояния + выбросы)
+              const transportAnalysis = await processTransportDocumentParallel(transportData, client);
+
+              // Сохраняем результаты анализа в extractedData
+              if (!result.extractedData) {
+                result.extractedData = {};
+              }
+
+              result.extractedData.transport = {
+                ...transportData,
+                analysis: transportAnalysis
+              };
+
+              console.log('🎯 Транспортный документ обработан:', {
+                fuelType: transportAnalysis.vehicle.fuelType.fuelType,
+                distance: transportAnalysis.route.distance.distance,
+                emissions: transportAnalysis.emissions?.co2Emissions,
+                needsReview: transportAnalysis.needsUserReview
+              });
+
+              if (transportAnalysis.needsUserReview) {
+                console.warn('⚠️ Транспортный документ требует проверки пользователем (низкая уверенность)');
+              }
+            } else {
+              // Детальная информация о том, что именно не удалось извлечь
+              const missingFields = [];
+              if (!transportData.vehicle.model) missingFields.push('модель автомобиля');
+              if (!transportData.route.fromCity) missingFields.push('город отправления');
+              if (!transportData.route.toCity) missingFields.push('город назначения');
+
+              console.warn(`⚠️ Не удалось извлечь полные данные транспортного документа. Отсутствуют: ${missingFields.join(', ')}`);
+              console.warn(`📝 Совет: Убедитесь что в документе четко указаны марка автомобиля и маршрут (откуда-куда)`);
+            }
+          } catch (transportError) {
+            console.error('❌ Ошибка обработки транспортного документа:', transportError);
+            // Не прерываем основной процесс
+          }
+        }
+
       } catch (error) {
         console.error('⚠️ Level 4 failed:', error);
       }
-    }
-
-    // Level 5: Классификация категории (опционально)
-    if (options?.classifyCategory !== false) {
-      console.log('🏷️ Level 5: Классификация категории через GigaChat 2 MAX...');
-      try {
-        const classification = await client.classifyDocumentCategory(textForProcessing);
-        result.category = classification.category;
-        result.categoryConfidence = classification.confidence;
-      } catch (error) {
-        console.error('⚠️ Level 5 failed:', error);
-      }
+    } else {
+      console.log('⏭️ Level 4: Классификация категории отключена');
     }
 
     return result;
@@ -384,7 +567,11 @@ export async function postProcessWithFoundationModels(
 }
 
 /**
- * Полная многоуровневая обработка: OCR (Levels 1-2) + постобработка (Levels 3-5)
+ * Полная многоуровневая обработка: OCR (Level 1) + постобработка (Levels 2-4)
+ * Level 1: Yandex Vision / Tesseract OCR
+ * Level 2: Исправление ошибок OCR
+ * Level 3: Извлечение данных
+ * Level 4: Классификация + транспортные документы
  */
 export async function processImageWithPostProcessing(
   buffer: Buffer,
@@ -401,13 +588,15 @@ export async function processImageWithPostProcessing(
   extractedData?: any;
   category?: string;
   categoryConfidence?: number;
+  subcategory?: string;
+  categoryReasoning?: string;
 }> {
-  console.log('🚀 Запуск полной многоуровневой обработки (Levels 1-5)...');
+  console.log('🚀 Запуск полной многоуровневой обработки (Levels 1-4)...');
 
-  // Levels 1-2: Базовый OCR
+  // Level 1: Базовый OCR (Yandex Vision / Tesseract)
   const ocrResult = await processImageMultiLevel(buffer, options?.ocrOptions);
 
-  // Levels 3-5: Постобработка через Foundation Models
+  // Levels 2-4: Постобработка через Foundation Models
   const postProcessed = await postProcessWithFoundationModels(
     ocrResult.text,
     options?.postProcessOptions

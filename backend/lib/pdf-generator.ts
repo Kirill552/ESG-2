@@ -58,7 +58,7 @@ export async function generatePDF(
     });
 
     // Ждем загрузки шрифтов
-    await page.waitForTimeout(1000);
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Проверяем, что шрифты загружены
     await page.evaluate(() => {

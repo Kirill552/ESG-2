@@ -260,14 +260,16 @@ export function Dashboard({ onNavigate, onLogout }: DashboardProps) {
                 <div className="space-y-3">
                   {recentDocuments.map((doc, index) => (
                     <div key={index} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         {getStatusIcon(doc.status)}
-                        <div>
-                          <p className="font-medium text-sm text-gray-900">{doc.name}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm text-gray-900 truncate" title={doc.name}>{doc.name}</p>
                           <p className="text-xs text-[#58625d]">{doc.date}</p>
                         </div>
                       </div>
-                      {getStatusBadge(doc.status)}
+                      <div className="ml-3 flex-shrink-0">
+                        {getStatusBadge(doc.status)}
+                      </div>
                     </div>
                   ))}
                 </div>

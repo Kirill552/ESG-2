@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+﻿import React, { useState, useMemo } from 'react';
 import { Layout } from './Layout';
 import { Breadcrumbs } from './Breadcrumbs';
 import { FileUpload } from './FileUpload';
@@ -7,6 +7,7 @@ import { DocumentsEmptyState } from './EmptyState';
 import { AnimatedCounter } from './AnimatedCounter';
 import { SuccessParticles } from './ParticleEffect';
 import { DocumentsTable } from './DocumentsTable';
+import { TransportDocumentsGuideModal } from './TransportDocumentsGuideModal';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { motion } from 'motion/react';
@@ -20,7 +21,10 @@ import {
   FileText,
   CheckCircle,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  AlertCircle,
+  ChevronRight,
+  RotateCw
 } from 'lucide-react';
 
 type Page = 'dashboard' | 'analytics' | 'documents' | 'reports' | 'settings' | 'pricing';
@@ -33,6 +37,7 @@ interface DocumentsProps {
 export function Documents({ onNavigate, onLogout }: DocumentsProps) {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [showSuccessParticles, setShowSuccessParticles] = useState(false);
+  const [showTransportGuide, setShowTransportGuide] = useState(false);
   const { toast } = useToast();
 
   const {
@@ -44,10 +49,21 @@ export function Documents({ onNavigate, onLogout }: DocumentsProps) {
     refresh
   } = useDocuments({
     initialFilters: {
-      limit: 25,
+      pageSize: 25,
       page: 1
     }
   });
+
+  // Определяем наличие транспортных документов
+  const hasTransportDocuments = useMemo(() => {
+    if (!documents || documents.length === 0) return false;
+    return documents.some(doc => doc.category === 'Транспорт');
+  }, [documents]);
+
+  const transportDocsCount = useMemo(() => {
+    if (!documents) return 0;
+    return documents.filter(doc => doc.category === 'Транспорт').length;
+  }, [documents]);
 
   const handleUploadComplete = () => {
     setShowSuccessParticles(true);
@@ -133,7 +149,7 @@ export function Documents({ onNavigate, onLogout }: DocumentsProps) {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-2xl font-bold text-[#1dc962]">
-                        <AnimatedCounter value={stats?.byStatus?.PROCESSED || 0} />
+                        <AnimatedCounter value={stats?.processed || 0} />
                       </div>
                       <div className="text-sm text-gray-600">Обработано</div>
                     </div>
@@ -155,7 +171,7 @@ export function Documents({ onNavigate, onLogout }: DocumentsProps) {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-2xl font-bold text-blue-600">
-                        <AnimatedCounter value={stats?.byStatus?.PROCESSING || 0} />
+                        <AnimatedCounter value={stats?.processing || 0} />
                       </div>
                       <div className="text-sm text-gray-600">В обработке</div>
                     </div>
@@ -177,7 +193,7 @@ export function Documents({ onNavigate, onLogout }: DocumentsProps) {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="text-2xl font-bold text-red-600">
-                        <AnimatedCounter value={stats?.byStatus?.ERROR || 0} />
+                        <AnimatedCounter value={stats?.failed || 0} />
                       </div>
                       <div className="text-sm text-gray-600">Ошибка</div>
                     </div>
@@ -189,6 +205,27 @@ export function Documents({ onNavigate, onLogout }: DocumentsProps) {
               </Card>
             </motion.div>
           </div>
+
+          {/* Transport Documents Warning Button */}
+          {hasTransportDocuments && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+              className="mb-4"
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100 hover:border-amber-400 transition-all"
+                onClick={() => setShowTransportGuide(true)}
+              >
+                <AlertCircle className="h-4 w-4" />
+                <span className="font-medium">Важно: ИИ-расчеты</span>
+                <ChevronRight className="h-3 w-3 ml-1" />
+              </Button>
+            </motion.div>
+          )}
 
           {/* Documents Table */}
           {(!documents || documents.length === 0) && !loading ? (
@@ -218,6 +255,13 @@ export function Documents({ onNavigate, onLogout }: DocumentsProps) {
       <SuccessParticles
         show={showSuccessParticles}
         onComplete={() => setShowSuccessParticles(false)}
+      />
+
+      {/* Transport Documents Guide Modal */}
+      <TransportDocumentsGuideModal
+        isOpen={showTransportGuide}
+        onClose={() => setShowTransportGuide(false)}
+        transportDocsCount={transportDocsCount}
       />
     </Layout>
   );
