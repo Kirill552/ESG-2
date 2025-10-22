@@ -28,6 +28,7 @@ export interface ReportGenerationData {
   org_phone?: string;
   org_email?: string;
   report_year?: string;
+  organizationLegalForm?: string; // Организационно-правовая форма (ООО, АО, и т.д.)
 
   // Поля для CBAM
   eori?: string;
@@ -141,7 +142,7 @@ function prepareTemplateData(
     baseData.executor_phone = data.org_phone || baseData.executor_phone || 'Не указано';
 
     // Дополнительные поля для 296-FZ
-    baseData.legal_form = baseData.legal_form || 'ООО';
+    baseData.legal_form = data.organizationLegalForm || baseData.legal_form || 'Не указана';
     baseData.ogrn = baseData.ogrn || data.org_okpo || 'Не указано';
     baseData.okved = baseData.okved || '38.11';
     baseData.submission_basis = baseData.submission_basis || 'п. 4 ст. 23 296-ФЗ';

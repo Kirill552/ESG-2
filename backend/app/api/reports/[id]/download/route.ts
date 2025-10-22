@@ -76,6 +76,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             directorPosition: true,
             phone: true, // Корректное поле телефона из профиля
             emailForBilling: true, // Корректное поле email из профиля
+            opfCode: true, // Код организационно-правовой формы
+            opfFull: true, // Полное название ОПФ
+            opfShort: true, // Краткое название ОПФ (ООО, АО, и т.д.)
           }
         }
       }
@@ -117,6 +120,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         organizationOkpo: organization.profile?.okpo || '',
         organizationOktmo: organization.profile?.oktmo || '',
         organizationAddress: organization.profile?.legalAddress || organization.address || 'Не указан',
+        organizationLegalForm: organization.profile?.opfShort || 'Не указана',
         emissionData: {
           scope1: totalEmissions * 0.4,
           scope2: totalEmissions * 0.4,

@@ -23,6 +23,12 @@ interface DadataCompanyData {
       full_with_opf?: string;
       short_with_opf?: string;
     };
+    opf?: {
+      type?: string; // LEGAL, INDIVIDUAL
+      code?: string; // Код по ОКОПФ (5 цифр)
+      full?: string; // Полное название ОПФ
+      short?: string; // Краткое название ОПФ (ООО, АО, и т.д.)
+    };
     address: {
       value?: string;
       unrestricted_value?: string;
@@ -60,6 +66,10 @@ export interface CompanyInfo {
   directorPosition?: string;
   phone?: string;
   email?: string;
+  // Организационно-правовая форма (ОПФ)
+  opfCode?: string; // Код по ОКОПФ (например, "12300")
+  opfFull?: string; // Полное название (например, "Общество с ограниченной ответственностью")
+  opfShort?: string; // Краткое название (например, "ООО")
 }
 
 class DadataMcpClient {
@@ -205,6 +215,10 @@ class DadataMcpClient {
       directorPosition: companyData.management?.post || undefined,
       phone: companyData.phones?.[0]?.value || undefined,
       email: companyData.emails?.[0]?.value || undefined,
+      // Организационно-правовая форма (ОПФ)
+      opfCode: companyData.opf?.code || undefined,
+      opfFull: companyData.opf?.full || undefined,
+      opfShort: companyData.opf?.short || undefined,
     };
   }
 

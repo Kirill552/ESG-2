@@ -16,6 +16,7 @@ import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 import { dadataMcpClient } from '@/lib/dadata-mcp-client';
 import { checkoService } from '@/lib/checko-service';
+import { extractLegalForm } from '@/lib/legal-form-parser';
 import { Logger } from '@/lib/logger';
 
 const logger = new Logger('autofill-api');
@@ -144,6 +145,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Извлечение ОПФ из названия или использование данных из DaData
+    let opfCode = companyData.opfCode || null;
+    let opfFull = companyData.opfFull || null;
+    let opfShort = companyData.opfShort || null;
+
+    // Если DaData не вернул ОПФ, пытаемся извлечь из названия
+    if (!opfShort && companyData.fullName) {
+      const parsedOpf = extractLegalForm(companyData.fullName);
+      if (parsedOpf) {
+        opfCode = parsedOpf.code;
+        opfFull = parsedOpf.full;
+        opfShort = parsedOpf.short;
+        logger.info(`ОПФ извлечена из названия: ${opfShort}`, {
+          userId,
+          fullName: companyData.fullName,
+        });
+      }
+    }
+
     // Обновление или создание профиля организации
     const profileData = {
       fullName: companyData.fullName || null,
@@ -161,6 +181,10 @@ export async function POST(req: NextRequest) {
       // Данные руководителя
       directorName: companyData.director || null,
       directorPosition: companyData.directorPosition || null,
+      // Организационно-правовая форма (ОПФ)
+      opfCode: opfCode,
+      opfFull: opfFull,
+      opfShort: opfShort,
       // Статус
       companyStatus: companyData.status === 'Действует' ? 'ACTIVE' : 'UNKNOWN',
       status: 'VERIFIED' as const,
