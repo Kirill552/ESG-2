@@ -18,11 +18,17 @@ const organizationSchema = z.object({
   industry: z.string().max(200, "Слишком длинное название отрасли").optional(),
   okvedCode: z.string().optional(),
   okvedName: z.string().optional(),
+  okpo: z.string().optional(),
+  oktmo: z.string().optional(),
+  okato: z.string().optional(),
+  fullName: z.string().optional(),
+  legalAddress: z.string().optional(),
   director: z.string().max(100, "Слишком длинное имя директора").optional(),
   directorPosition: z.string().max(100, "Слишком длинная должность").optional(),
   phone: z.string().optional(),
-  email: z.string().email("Некорректный email").optional(),
-  website: z.string().url("Некорректный URL сайта").optional(),
+  email: z.string().email("Некорректный email").optional().or(z.literal('')),
+  emailForBilling: z.string().email("Некорректный email для связи").optional().or(z.literal('')),
+  website: z.string().url("Некорректный URL сайта").optional().or(z.literal('')),
 });
 
 export async function GET(req: NextRequest) {
@@ -104,6 +110,8 @@ export async function GET(req: NextRequest) {
             legalAddress: true,
             directorName: true,
             directorPosition: true,
+            phone: true,
+            emailForBilling: true,
           }
         }
       }
@@ -121,7 +129,7 @@ export async function GET(req: NextRequest) {
       name: organization.name,
       inn: organization.inn,
       address: organization.address,
-      phone: organization.phone,
+      phone: organization.profile?.phone || organization.phone, // Приоритет profile.phone
       email: organization.email,
       website: organization.website,
       // Данные из profile
@@ -136,6 +144,7 @@ export async function GET(req: NextRequest) {
       legalAddress: organization.profile?.legalAddress,
       directorName: organization.profile?.directorName,
       directorPosition: organization.profile?.directorPosition,
+      emailForBilling: organization.profile?.emailForBilling,
     } : null;
 
     return NextResponse.json({
@@ -300,20 +309,32 @@ export async function PUT(req: NextRequest) {
         inn: payload.inn,
         kpp: payload.kpp || null,
         ogrn: payload.ogrn || null,
+        okpo: payload.okpo || null,
+        oktmo: payload.oktmo || null,
+        okato: payload.okato || null,
         okved: payload.okvedCode || null,
-        legalAddress: payload.address || null,
+        fullName: payload.fullName || null,
+        legalAddress: payload.legalAddress || payload.address || null,
         directorName: payload.director || null,
         directorPosition: payload.directorPosition || null,
+        phone: payload.phone || null,
+        emailForBilling: payload.emailForBilling || null,
       },
       create: {
         organizationId: organization.id,
         inn: payload.inn,
         kpp: payload.kpp || null,
         ogrn: payload.ogrn || null,
+        okpo: payload.okpo || null,
+        oktmo: payload.oktmo || null,
+        okato: payload.okato || null,
         okved: payload.okvedCode || null,
-        legalAddress: payload.address || null,
+        fullName: payload.fullName || null,
+        legalAddress: payload.legalAddress || payload.address || null,
         directorName: payload.director || null,
         directorPosition: payload.directorPosition || null,
+        phone: payload.phone || null,
+        emailForBilling: payload.emailForBilling || null,
       },
       select: {
         id: true,
@@ -328,6 +349,8 @@ export async function PUT(req: NextRequest) {
         legalAddress: true,
         directorName: true,
         directorPosition: true,
+        phone: true,
+        emailForBilling: true,
       }
     });
 
@@ -337,7 +360,7 @@ export async function PUT(req: NextRequest) {
       name: organization.name,
       inn: organization.inn,
       address: organization.address,
-      phone: organization.phone,
+      phone: profile.phone || organization.phone, // Приоритет profile.phone
       email: organization.email,
       kpp: profile.kpp,
       ogrn: profile.ogrn,
@@ -350,6 +373,7 @@ export async function PUT(req: NextRequest) {
       legalAddress: profile.legalAddress,
       directorName: profile.directorName,
       directorPosition: profile.directorPosition,
+      emailForBilling: profile.emailForBilling,
     };
 
     // Записываем в аудит-лог

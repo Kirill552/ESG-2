@@ -65,7 +65,10 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
     fullName: '',
     legalAddress: '',
     directorName: '',
-    directorPosition: ''
+    directorPosition: '',
+    // Контактные данные организации (требуются для 296-ФЗ)
+    phone: '',
+    emailForBilling: ''
   });
 
   const [isAdditionalFieldsOpen, setIsAdditionalFieldsOpen] = useState(false);
@@ -166,7 +169,9 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
               fullName: org.fullName || '',
               legalAddress: org.legalAddress || org.address || '',
               directorName: org.directorName || '',
-              directorPosition: org.directorPosition || ''
+              directorPosition: org.directorPosition || '',
+              phone: org.phone || '',
+              emailForBilling: org.emailForBilling || ''
             });
           }
         }
@@ -451,7 +456,10 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
           fullName: organizationData.fullName,
           legalAddress: organizationData.legalAddress,
           director: organizationData.directorName,
-          directorPosition: organizationData.directorPosition
+          directorPosition: organizationData.directorPosition,
+          // Контактные данные организации (обязательные для 296-ФЗ)
+          phone: organizationData.phone,
+          emailForBilling: organizationData.emailForBilling
         }),
       });
 
@@ -1048,6 +1056,44 @@ export function Settings({ onNavigate, onLogout }: SettingsProps) {
                                   }
                                   placeholder="Генеральный директор"
                                 />
+                              </div>
+                            </div>
+
+                            {/* Контактные данные организации */}
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="orgPhone">
+                                  Контактный телефон <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="orgPhone"
+                                  value={organizationData.phone}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, phone: e.target.value }))
+                                  }
+                                  placeholder="+7 (495) 123-45-67"
+                                  type="tel"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Для связи с проверяющими органами
+                                </p>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="orgEmail">
+                                  Email для связи <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="orgEmail"
+                                  value={organizationData.emailForBilling}
+                                  onChange={(e) =>
+                                    setOrganizationData(prev => ({ ...prev, emailForBilling: e.target.value }))
+                                  }
+                                  placeholder="info@company.ru"
+                                  type="email"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  Для официальных уведомлений
+                                </p>
                               </div>
                             </div>
                           </div>
