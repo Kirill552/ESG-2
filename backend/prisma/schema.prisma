@@ -207,8 +207,10 @@ model Report {
   updatedAt         DateTime           @updatedAt
   version           Int                @default(1)
   isLocked          Boolean            @default(false)
-  signedAt          DateTime?
-  signedBy          String?
+  signedAt          DateTime?          // Дата подписания отчета
+  signedBy          String?            // ФИО лица, подписавшего отчет
+  signerPosition    String?            // Должность подписанта (например, "Генеральный директор")
+  signatureType     String?            // Тип электронной подписи (например, "Усиленная квалифицированная ЭП")
   dataHash          String?
   currentSnapshotId String?
   archivedAt        DateTime?
@@ -625,6 +627,9 @@ model OrganizationProfile {
   // Данные руководителя (для отчетов 296-ФЗ)
   directorName        String? // ФИО руководителя
   directorPosition    String? // Должность руководителя
+  // Контактное лицо для отчетности (может отличаться от руководителя)
+  contactPersonName   String? // ФИО контактного лица (например, главный бухгалтер, эколог)
+  contactPersonPhone  String? // Телефон контактного лица для связи с проверяющими органами
   // Дополнительные данные из Dadata
   opfCode             String? // Код организационно-правовой формы
   opfFull             String? // Полное название ОПФ (ООО, АО, и т.д.)
